@@ -1,0 +1,25 @@
+# Environnement virtuel
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# macOS
+.DS_Store
+
+# Données générées (épreuves et résultats — non versionnées)
+data/epreuves/
+data/resultats/
+
+# Streamlit
+.streamlit/
+
+# IDE
+.vscode/
+.idea/

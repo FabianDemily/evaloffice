@@ -1,0 +1,198 @@
+[
+  {
+    "id": "formule_multiplication",
+    "label": "Opérateurs arithmétiques",
+    "description": "Formule de multiplication entre deux colonnes",
+    "groupe": "formules",
+    "type": "formule_multiplication",
+    "consigne": "Dans la colonne {colonne_resultat} ({cellules}), calculez le {libelle} a l'aide d'une formule (et non d'une valeur tapee a la main).",
+    "actif_defaut": true,
+    "points_defaut": 4
+  },
+  {
+    "id": "formule_somme",
+    "label": "Fonction SOMME",
+    "description": "Fonction SOMME sur une colonne numerique",
+    "groupe": "formules",
+    "type": "formule_fonction",
+    "fonction": "SOMME",
+    "libelle": "le total de la quantite",
+    "consigne": "Dans la cellule {cellule}, utilisez la fonction {fonction} pour calculer : {libelle}.",
+    "actif_defaut": true,
+    "points_defaut": 1
+  },
+  {
+    "id": "formule_moyenne",
+    "label": "Fonction MOYENNE",
+    "description": "Fonction MOYENNE sur une colonne numerique",
+    "groupe": "formules",
+    "type": "formule_fonction",
+    "fonction": "MOYENNE",
+    "colonne": "B",
+    "libelle": "le prix moyen",
+    "consigne": "Dans la cellule {cellule}, utilisez la fonction {fonction} pour calculer : {libelle}.",
+    "actif_defaut": true,
+    "points_defaut": 1
+  },
+  {
+    "id": "formule_max",
+    "label": "Fonction MAX",
+    "description": "Fonction MAX sur une colonne numerique",
+    "groupe": "formules",
+    "type": "formule_fonction",
+    "fonction": "MAX",
+    "colonne": "B",
+    "libelle": "le prix maximum",
+    "consigne": "Dans la cellule {cellule}, utilisez la fonction {fonction} pour calculer : {libelle}.",
+    "actif_defaut": false,
+    "points_defaut": 1
+  },
+  {
+    "id": "formule_min",
+    "label": "Fonction MIN",
+    "description": "Fonction MIN sur une colonne numerique",
+    "groupe": "formules",
+    "type": "formule_fonction",
+    "fonction": "MIN",
+    "colonne": "B",
+    "libelle": "le prix minimum",
+    "consigne": "Dans la cellule {cellule}, utilisez la fonction {fonction} pour calculer : {libelle}.",
+    "actif_defaut": false,
+    "points_defaut": 1
+  },
+  {
+    "id": "formule_nb",
+    "label": "Fonction NB",
+    "description": "Fonction NB (comptage) sur une colonne numerique",
+    "groupe": "formules",
+    "type": "formule_fonction",
+    "fonction": "NB",
+    "libelle": "le nombre d'articles",
+    "consigne": "Dans la cellule {cellule}, utilisez la fonction {fonction} pour calculer : {libelle}.",
+    "actif_defaut": false,
+    "points_defaut": 1
+  },
+  {
+    "id": "formule_operateurs_mixtes",
+    "label": "Combinaison d'opérateurs arithmétiques",
+    "description": "Utiliser plusieurs opérateurs (+, -, *, /) dans une même formule",
+    "groupe": "formules",
+    "type": "formule_operateurs_mixtes",
+    "consigne": "Dans la colonne {colonne_resultat} ({cellules}), calculez le {libelle} en combinant au moins deux opérateurs arithmétiques différents (+, -, *, /) dans la même formule.",
+    "actif_defaut": false,
+    "points_defaut": 3
+  },
+  {
+    "id": "formule_si",
+    "label": "Fonction SI (conditionnelle)",
+    "description": "Fonction SI conditionnelle",
+    "groupe": "formules",
+    "type": "formule_fonction",
+    "fonction": "SI",
+    "consigne": "Dans les cellules {cellules}, utilisez une formule SI pour afficher \"OK\" si la quantite (colonne Quantite) est superieure a 5, sinon \"BAS\".",
+    "actif_defaut": true,
+    "points_defaut": 4
+  },
+  {
+    "id": "tri_simple",
+    "label": "Tri simple",
+    "description": "Tri croissant sur une colonne",
+    "groupe": "tri",
+    "type": "tri",
+    "consigne": "Triez le tableau ({plage}) par ordre croissant sur la colonne {colonne_item}.",
+    "actif_defaut": true,
+    "points_defaut": 2
+  },
+  {
+    "id": "tri_multicritere",
+    "label": "Tri multicritere",
+    "description": "Tri sur deux colonnes (Categorie asc, Prix desc)",
+    "groupe": "tri",
+    "type": "tri",
+    "consigne": "Triez le tableau ({plage}) par Categorie (ordre croissant), puis par Prix (ordre decroissant) en cas d'egalite de categorie.",
+    "actif_defaut": true,
+    "points_defaut": 2
+  },
+  {
+    "id": "filtre_auto",
+    "label": "Filtre automatique",
+    "description": "Activation du filtre automatique sur un tableau",
+    "groupe": "tri",
+    "type": "filtre_auto",
+    "consigne": "Activez un filtre automatique sur le tableau de cette feuille.",
+    "actif_defaut": true,
+    "points_defaut": 1
+  },
+  {
+    "id": "mise_en_forme_conditionnelle",
+    "label": "Mise en forme conditionnelle",
+    "description": "Regle de mise en forme conditionnelle sur une colonne",
+    "groupe": "visuel",
+    "type": "mise_en_forme_conditionnelle",
+    "consigne": "Appliquez une mise en forme conditionnelle sur la colonne Ventes ({plage}) pour mettre en evidence les valeurs strictement superieures a {seuil}.",
+    "actif_defaut": true,
+    "points_defaut": 2
+  },
+  {
+    "id": "graphique",
+    "label": "Graphique",
+    "description": "Creation d'un graphique a partir d'un tableau de donnees",
+    "groupe": "visuel",
+    "type": "graphique",
+    "consigne": "Creez un graphique (au choix) illustrant les ventes par categorie a partir du tableau de cette feuille.",
+    "actif_defaut": true,
+    "points_defaut": 2
+  },
+  {
+    "id": "tcd",
+    "label": "Tableau croise dynamique",
+    "description": "Creation d'un TCD (niveau initiation)",
+    "groupe": "tcd",
+    "type": "tcd",
+    "consigne": "Creez un tableau croise dynamique (niveau initiation) a partir du tableau de donnees de cette feuille.",
+    "actif_defaut": true,
+    "points_defaut": 2
+  },
+  {
+    "id": "synthese_texte",
+    "label": "Synthese / question ouverte",
+    "description": "Reponse texte courte verifiee par mots-cles",
+    "groupe": "synthese",
+    "type": "texte_motcles",
+    "mots_cles": ["croissant", "alphabetique", "ordre"],
+    "consigne": "Dans la cellule {cellule}, repondez en quelques mots : {question}",
+    "actif_defaut": true,
+    "points_defaut": 1
+  },
+  {
+    "id": "recopie_formule",
+    "label": "Références relatives et absolues",
+    "description": "Combiner reference relative et reference absolue ($) dans une formule recopiee",
+    "groupe": "recopie",
+    "type": "recopie_formule",
+    "consigne": "Le taux applique est fixe en {cellule_absolue}. Dans la colonne {colonne_resultat} ({cellules}), calculez le montant pour chaque ligne en multipliant le prix de la ligne par le taux fixe en {cellule_absolue}. Utilisez une reference qui reste figee sur {cellule_absolue} lorsque vous recopiez la formule sur les autres lignes.",
+    "actif_defaut": false,
+    "points_defaut": 4
+  },
+  {
+    "id": "mise_en_forme_cellule",
+    "label": "Mise en forme de cellules",
+    "description": "Mettre en forme les elements d'une feuille de calcul (cellule, colonne, ligne)",
+    "groupe": "format_cellule",
+    "type": "mise_en_forme_cellule",
+    "consigne": "Sur la ligne d'en-tete ({plage}), appliquez une mise en forme : texte en gras et une couleur de fond, pour mettre en valeur les titres de colonnes.",
+    "actif_defaut": false,
+    "points_defaut": 2
+  },
+  {
+    "id": "format_pourcentage",
+    "label": "Format de nombre",
+    "description": "Distinguer le contenu, la valeur et l'affichage des cellules : appliquer un format pourcentage sans changer la valeur",
+    "groupe": "format_nombre",
+    "type": "format_nombre",
+    "format_attendu": "%",
+    "consigne": "Dans la colonne {colonne_resultat} ({cellules}), appliquez un format d'affichage en pourcentage sur ces cellules.",
+    "actif_defaut": false,
+    "points_defaut": 2
+  }
+]

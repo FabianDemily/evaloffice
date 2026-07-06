@@ -1,0 +1,101 @@
+[
+  {
+    "id": "mise_en_page",
+    "label": "Mise en page",
+    "description": "Paramétrer l'orientation et les marges du document",
+    "groupe": "mise_en_page",
+    "type": "mise_en_page",
+    "actif_defaut": true,
+    "points_defaut": 2
+  },
+  {
+    "id": "structure_hierarchique",
+    "label": "Structure hiérarchique",
+    "description": "Appliquer les styles Titre 1 / Titre 2 pour structurer le document",
+    "groupe": "structure",
+    "type": "structure_hierarchique",
+    "actif_defaut": true,
+    "points_defaut": 4
+  },
+  {
+    "id": "styles_paragraphe",
+    "label": "Styles de paragraphe",
+    "description": "Appliquer des styles de paragraphe (Corps de texte, etc.)",
+    "groupe": "structure",
+    "type": "styles_paragraphe",
+    "actif_defaut": true,
+    "points_defaut": 2
+  },
+  {
+    "id": "mise_en_forme_caracteres",
+    "label": "Mise en forme des caractères",
+    "description": "Mettre en forme des caractères (gras, taille, couleur)",
+    "groupe": "mise_en_forme",
+    "type": "mise_en_forme_caracteres",
+    "actif_defaut": true,
+    "points_defaut": 3
+  },
+  {
+    "id": "rechercher_remplacer",
+    "label": "Rechercher-remplacer",
+    "description": "Utiliser la fonction Rechercher-remplacer pour modifier un terme dans tout le document",
+    "groupe": "outils",
+    "type": "rechercher_remplacer",
+    "actif_defaut": true,
+    "points_defaut": 2
+  },
+  {
+    "id": "saisie_texte",
+    "label": "Saisie de texte",
+    "description": "Saisir du texte en respectant la ponctuation et les caractères spéciaux",
+    "groupe": "outils",
+    "type": "saisie_texte",
+    "actif_defaut": true,
+    "points_defaut": 2
+  },
+  {
+    "id": "stabilite_mise_en_page",
+    "label": "Stabilité de la mise en page",
+    "description": "Insérer un saut de page pour structurer le document",
+    "groupe": "mise_en_page",
+    "type": "stabilite_mise_en_page",
+    "actif_defaut": true,
+    "points_defaut": 2
+  },
+  {
+    "id": "image",
+    "label": "Intégration d'une image",
+    "description": "Insérer et dimensionner une image dans le document",
+    "groupe": "objets",
+    "type": "image",
+    "actif_defaut": true,
+    "points_defaut": 2
+  },
+  {
+    "id": "table_des_matieres",
+    "label": "Table des matières",
+    "description": "Générer une table des matières automatique",
+    "groupe": "structure",
+    "type": "table_des_matieres",
+    "actif_defaut": true,
+    "points_defaut": 2
+  },
+  {
+    "id": "entete_pied_page",
+    "label": "En-tête et pied de page",
+    "description": "Renseigner l'en-tête et le pied de page du document",
+    "groupe": "mise_en_page",
+    "type": "entete_pied_page",
+    "actif_defaut": true,
+    "points_defaut": 2
+  },
+  {
+    "id": "note_de_bas_de_page",
+    "label": "Note de bas de page",
+    "description": "Insérer une note de bas de page sur un terme spécifique",
+    "groupe": "objets",
+    "type": "note_de_bas_de_page",
+    "actif_defaut": true,
+    "points_defaut": 2
+  }
+]

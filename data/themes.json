@@ -1,0 +1,92 @@
+{
+  "librairie": {
+    "colonne_item": "Titre",
+    "categories": ["Roman", "Sciences", "Histoire", "Scolaire"],
+    "items": [
+      "Atlas", "Biologie 101", "Chimie facile", "Dictees CE2", "Encyclopedie",
+      "Francais facile", "Geographie monde", "Histoire ancienne", "Initiation calcul",
+      "Jardins du monde", "Kit experiences", "Lecture CP", "Mathematiques 6e",
+      "Nature et vivant", "Origines du monde", "Petits contes",
+      "Conjugaison pratique", "Orthographe facile", "Sciences de la terre",
+      "Astronomie simple", "Physique amusante", "Code et robotique",
+      "Arts plastiques", "Musique et rythme", "Civilisations anciennes",
+      "Mythologie grecque", "Decouverte des animaux", "Vie des oceans",
+      "Climat et meteo", "Grandes inventions", "Economie simple", "Citoyennete",
+      "Philosophie pour enfants", "Poesie illustree", "Theatre scolaire",
+      "Bandes dessinees", "Romans jeunesse", "Contes du monde",
+      "Sciences experimentales", "Geometrie facile"
+    ]
+  },
+  "pharmacie": {
+    "colonne_item": "Produit",
+    "categories": ["Antidouleur", "Hygiene", "Vitamines", "Premiers secours"],
+    "items": [
+      "Antalgique A", "Sirop toux", "Creme apaisante", "Vitamine C", "Pansements",
+      "Thermometre", "Masque chirurgical", "Gel hydroalcoolique", "Collyre",
+      "Patch chauffant", "Spray nasal", "Comprimes digestion", "Creme solaire",
+      "Complement magnesium", "Antalgique B", "Antihistaminique", "Pastilles gorge",
+      "Vitamine D", "Compresses steriles", "Bande elastique", "Attelle doigt",
+      "Gel antiseptique", "Solution physiologique", "Creme cicatrisante",
+      "Baume musculaire", "Patch anti-douleur", "Sels de bain", "Huile essentielle",
+      "Tisane digestive", "Probiotiques", "Vitamine B12", "Fer complement",
+      "Zinc complement", "Creme anti-inflammatoire", "Spray gorge",
+      "Gouttes auriculaires", "Bandage compressif", "Coussin chauffant",
+      "Poche de glace", "Tensiometre"
+    ]
+  },
+  "sport": {
+    "colonne_item": "Article",
+    "categories": ["Fitness", "Sports collectifs", "Natation", "Outdoor"],
+    "items": [
+      "Ballon foot", "Raquette tennis", "Tapis yoga", "Velo enfant", "Corde a sauter",
+      "Gants boxe", "Maillot bain", "Chaussures running", "Sac de sport", "Haltere 5kg",
+      "Frisbee", "Protege-tibias", "Bonnet de bain", "Filet badminton",
+      "Ballon basket", "Ballon volley", "Raquette badminton", "Tapis fitness",
+      "Velo de route", "Corde d'escalade", "Gants de gym", "Combinaison natation",
+      "Chaussures trail", "Sac a dos randonnee", "Disque de lancer", "Genouilleres",
+      "Lunettes de piscine", "Filet de volley", "Haltere 10kg", "Kettlebell",
+      "Elastique de musculation", "Ballon de rugby", "Crosse de hockey",
+      "Palets de curling", "Patins a roulettes", "Skateboard", "Trottinette",
+      "Casque de velo", "Gourde de sport", "Chronometre"
+    ]
+  },
+  "kinesitherapie": {
+    "colonne_item": "Materiel",
+    "categories": ["Reeducation", "Renforcement musculaire", "Mobilite articulaire", "Equilibre et proprioception"],
+    "items": [
+      "Bande elastique de resistance", "Ballon de Klein", "Coussin proprioceptif",
+      "Rouleau de massage", "Halteres lestes", "Step de reeducation",
+      "Plateau d'equilibre", "Barres paralleles", "Velo ergometrique",
+      "Tapis de marche", "Espalier mural", "Poulie de reeducation",
+      "Cale-pieds lestes", "Bandes Kinesio", "Poche de glace therapeutique",
+      "Coussin chauffant", "Ballon suisse", "Disque proprioceptif",
+      "Manche de prehension", "Poids de poignet", "Elastique tubulaire",
+      "Cone de marquage", "Echelle de rythme", "Trampoline de reeducation",
+      "Bicyclette a bras", "Table de massage", "Goniometre", "Dynamometre manuel",
+      "Stimulateur electrique", "Compresses chaudes", "Bande de contention",
+      "Orthese de genou", "Attelle d'epaule", "Canne anglaise", "Deambulateur",
+      "Ceinture lombaire", "Mousse de positionnement", "Plan incline",
+      "Roue abdominale", "Corde elastique"
+    ]
+  },
+  "centre_readaptation": {
+    "colonne_item": "Equipement",
+    "categories": ["Cardio-respiratoire", "Posture et dos", "Reeducation post-operatoire", "Pediatrie"],
+    "items": [
+      "Tapis roulant medicalise", "Rameur de reeducation", "Spirometre incitatif",
+      "Ceinture abdominale", "Coussin lombaire", "Chaise ergonomique",
+      "Attelle de genou articulee", "Releveur de jambe", "Barre de transfert",
+      "Coussin d'assise", "Cube de motricite", "Parcours de motricite enfant",
+      "Tapis sensoriel", "Ballon sauteur enfant", "Anneaux de suspension",
+      "Sangle de suspension (TRX)", "Bande de mobilisation", "Roue d'epaule",
+      "Pedalier de reeducation", "Plateau de Freeman", "Marchette pediatrique",
+      "Coussin d'air therapeutique", "Tabouret de transfert", "Lit de verticalisation",
+      "Releveur electrique", "Sangle de marche", "Bequilles reglables",
+      "Fauteuil roulant manuel", "Coussin anti-escarres", "Drap de glisse",
+      "Disque de transfert pivotant", "Mousse de cale-tronc", "Tapis d'eveil",
+      "Parcours d'obstacles souples", "Trotteur pediatrique", "Hamac de suspension",
+      "Bandes de proprioception", "Plateau vibrant", "Bicyclette posturale",
+      "Coussin de positionnement lateral"
+    ]
+  }
+}
