@@ -3,3 +3,5 @@ openpyxl
 python-docx
 reportlab
 pandas
+Pillow
+matplotlib

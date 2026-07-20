@@ -17,7 +17,7 @@
     "type": "formule_fonction",
     "fonction": "SOMME",
     "libelle": "le total de la quantite",
-    "consigne": "Dans la cellule {cellule}, utilisez la fonction {fonction} pour calculer : {libelle}.",
+    "consigne": "Dans la cellule {cellule}, calculez {libelle} a l'aide d'une formule.",
     "actif_defaut": true,
     "points_defaut": 1
   },
@@ -30,7 +30,7 @@
     "fonction": "MOYENNE",
     "colonne": "B",
     "libelle": "le prix moyen",
-    "consigne": "Dans la cellule {cellule}, utilisez la fonction {fonction} pour calculer : {libelle}.",
+    "consigne": "Dans la cellule {cellule}, calculez {libelle} a l'aide d'une formule.",
     "actif_defaut": true,
     "points_defaut": 1
   },
@@ -43,7 +43,7 @@
     "fonction": "MAX",
     "colonne": "B",
     "libelle": "le prix maximum",
-    "consigne": "Dans la cellule {cellule}, utilisez la fonction {fonction} pour calculer : {libelle}.",
+    "consigne": "Dans la cellule {cellule}, calculez {libelle} a l'aide d'une formule.",
     "actif_defaut": false,
     "points_defaut": 1
   },
@@ -56,7 +56,7 @@
     "fonction": "MIN",
     "colonne": "B",
     "libelle": "le prix minimum",
-    "consigne": "Dans la cellule {cellule}, utilisez la fonction {fonction} pour calculer : {libelle}.",
+    "consigne": "Dans la cellule {cellule}, calculez {libelle} a l'aide d'une formule.",
     "actif_defaut": false,
     "points_defaut": 1
   },
@@ -68,7 +68,7 @@
     "type": "formule_fonction",
     "fonction": "NB",
     "libelle": "le nombre d'articles",
-    "consigne": "Dans la cellule {cellule}, utilisez la fonction {fonction} pour calculer : {libelle}.",
+    "consigne": "Dans la cellule {cellule}, calculez {libelle} a l'aide d'une formule.",
     "actif_defaut": false,
     "points_defaut": 1
   },
@@ -83,13 +83,34 @@
     "points_defaut": 3
   },
   {
+    "id": "formule_nbsi",
+    "label": "Fonction NB.SI",
+    "description": "Compter les cellules repondant a un critere",
+    "groupe": "formules",
+    "type": "formule_fonction",
+    "fonction": "NB.SI",
+    "consigne": "Dans la cellule {cellule}, comptez le nombre d'articles dont la quantite est strictement superieure a {seuil}.",
+    "actif_defaut": false,
+    "points_defaut": 2
+  },
+  {
+    "id": "formule_concat",
+    "label": "Concatenation",
+    "description": "Assembler plusieurs valeurs en un seul texte (CONCAT, CONCATENATE ou &)",
+    "groupe": "formules",
+    "type": "formule_concat",
+    "consigne": "Dans la colonne {colonne_resultat} ({cellules}), assemblez le nom du {libelle_item} et sa quantite pour obtenir une reference de type 'Aspirine | 5'.",
+    "actif_defaut": false,
+    "points_defaut": 3
+  },
+  {
     "id": "formule_si",
     "label": "Fonction SI (conditionnelle)",
     "description": "Fonction SI conditionnelle",
     "groupe": "formules",
     "type": "formule_fonction",
     "fonction": "SI",
-    "consigne": "Dans les cellules {cellules}, utilisez une formule SI pour afficher \"OK\" si la quantite (colonne Quantite) est superieure a 5, sinon \"BAS\".",
+    "consigne": "Dans les cellules {cellules}, affichez \"{val_vrai}\" si la quantite est strictement superieure a {seuil}, sinon \"{val_faux}\".",
     "actif_defaut": true,
     "points_defaut": 4
   },
@@ -154,15 +175,15 @@
     "points_defaut": 2
   },
   {
-    "id": "synthese_texte",
-    "label": "Synthese / question ouverte",
-    "description": "Reponse texte courte verifiee par mots-cles",
-    "groupe": "synthese",
-    "type": "texte_motcles",
-    "mots_cles": ["croissant", "alphabetique", "ordre"],
-    "consigne": "Dans la cellule {cellule}, repondez en quelques mots : {question}",
-    "actif_defaut": true,
-    "points_defaut": 1
+    "id": "recherchev",
+    "label": "Fonction RECHERCHEV",
+    "description": "Chercher une valeur dans un tableau de reference (VLOOKUP)",
+    "groupe": "recherche",
+    "type": "formule_fonction",
+    "fonction": "RECHERCHEV",
+    "consigne": "Dans la colonne {colonne_resultat} ({cellules}), retrouvez le coefficient correspondant a la categorie de chaque article en consultant le tableau de reference ({plage_ref}). La correspondance doit etre exacte.",
+    "actif_defaut": false,
+    "points_defaut": 4
   },
   {
     "id": "recopie_formule",

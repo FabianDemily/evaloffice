@@ -7,6 +7,7 @@ sont des emplacements a completer dans les etapes suivantes du projet.
 import io
 import json
 import tempfile
+import uuid
 import zipfile
 from pathlib import Path
 
@@ -18,7 +19,7 @@ from correcteurs.correcteur_excel import corriger_copie, resultats_vers_lignes_c
 from correcteurs.correcteur_word import corriger_copie_word
 from generateur.gen_excel import charger_competences, charger_themes, generer_epreuve_excel, sauver_competences
 from generateur.gen_word import charger_competences_word, generer_epreuve_word
-from rapports.pdf_report import generer_zip_rapports
+from rapports.pdf_report import generer_zip_rapports, generer_rapport_classe_pdf
 
 RACINE = Path(__file__).parent
 DOSSIER_EPREUVES = RACINE / "data" / "epreuves"
@@ -38,7 +39,7 @@ st.title("EvalOffice — HERS")
 configuration_cours = charger_configuration()
 
 onglet_configuration, onglet_generateur, onglet_correction, onglet_rapports, onglet_historique = st.tabs(
-    ["Configuration", "Generateur d'epreuves", "Correction", "Rapports PDF", "Historique"]
+    ["Configuration", "Generateur d'epreuves", "Correction", "Rapports", "Historique"]
 )
 
 # --- Onglet 0 : Configuration ------------------------------------------------
@@ -107,7 +108,8 @@ with onglet_generateur:
             groupes_labels = {
                 "formules": "Formules de base", "tri": "Tri et filtres",
                 "visuel": "Mise en forme et graphiques", "tcd": "Tableau croise dynamique",
-                "synthese": "Question ouverte", "recopie": "Recopie de formule",
+                "recopie": "Recopie de formule",
+                "recherche": "Fonctions de recherche",
                 "format_cellule": "Mise en forme d'une feuille de calcul",
                 "format_nombre": "Formats de nombres",
             }
@@ -116,8 +118,8 @@ with onglet_generateur:
                 "tri":           "#E0007A",
                 "visuel":        "#7B5EA7",
                 "tcd":           "#E8873A",
-                "synthese":      "#4A9A6F",
                 "recopie":       "#C0392B",
+                "recherche":     "#8E44AD",
                 "format_cellule":"#2980B9",
                 "format_nombre": "#16A085",
             }
@@ -139,6 +141,7 @@ with onglet_generateur:
         actives = []
         points_par_competence = {}
         options_graphique = {}
+        options_styles_paragraphe = {}
         for groupe_id, groupe_label in groupes_labels.items():
             comp_du_groupe = [c for c in competences if c.get("groupe") == groupe_id]
             if not comp_du_groupe:
@@ -195,6 +198,48 @@ with onglet_generateur:
                         "tendance": tendance and not tendance_disabled,
                     }
 
+                if comp["id"] == "styles_paragraphe" and coche and module == "word":
+                    with st.container():
+                        sp1, sp2, sp3 = st.columns([1.5, 1, 1])
+                        with sp1:
+                            taille_imposee = st.checkbox(
+                                "Taille imposee (varie par variante)",
+                                key="styles_taille", value=True,
+                                help="Cycle automatique 12/13/14 pt selon la variante — empêche la copie entre etudiants"
+                            )
+                        with sp2:
+                            justifie = st.checkbox("Texte justifie", key="styles_justifie", value=True)
+                        with sp3:
+                            nb_sous = 1 + (1 if taille_imposee else 0) + (1 if justifie else 0)
+                            st.caption(f"{nb_sous} sous-critere(s) — {points/nb_sous:.2f} pt chacun")
+                    options_styles_paragraphe = {
+                        "taille_imposee": taille_imposee,
+                        "justifie": justifie,
+                    }
+
+
+        # Avertissement combinaison risquée styles_paragraphe + mise_en_forme_caracteres
+        if module == "word":
+            comps_cochees = {comp["id"] for comp, coche in zip(competences, [
+                st.session_state.get(f"comp_{comp['id']}", False) for comp in competences
+            ]) if coche}
+            # Reconstruction simple : relire les checkboxes depuis session_state
+            sp_active = st.session_state.get("comp_styles_paragraphe", False)
+            mfc_active = st.session_state.get("comp_mise_en_forme_caracteres", False)
+            tdm_active = st.session_state.get("comp_table_des_matieres", False)
+            sh_active = st.session_state.get("comp_structure_hierarchique", False)
+            if sp_active and mfc_active:
+                st.warning(
+                    "⚠️ Combinaison « Styles de paragraphe » + « Mise en forme des caractères » : "
+                    "la consigne précisera d'appliquer le style Corps de texte EN PREMIER, "
+                    "puis la mise en forme du mot. L'ordre a été ajusté automatiquement."
+                )
+            if tdm_active and not sh_active:
+                st.warning(
+                    "⚠️ « Table des matières » sans « Structure hiérarchique » : "
+                    "la table des matières nécessite que les styles de titres soient appliqués. "
+                    "Pensez à ajouter la compétence Structure hiérarchique."
+                )
 
         st.markdown("**Variantes**")
         nb_variantes = st.number_input("Nombre de variantes a generer simultanement", min_value=1, max_value=6, value=1, step=1)
@@ -230,7 +275,7 @@ with onglet_generateur:
                             wb_etudiant, wb_corrige, config = generer_epreuve_excel(
                                 contexte=contexte, session=session, annee=int(annee), variante=variante,
                                 competences_actives=actives, points_par_competence=points_par_competence,
-                                nb_lignes=nb_lignes, seed=f"{annee}-{session}-{variante}", competences=competences,
+                                nb_lignes=nb_lignes, seed=f"{annee}-{session}-{variante}-{uuid.uuid4().hex[:8]}", competences=competences,
                                 activer_watermark=activer_watermark,
                                 options_par_competence={"graphique": options_graphique} if options_graphique else None,
                             )
@@ -248,6 +293,7 @@ with onglet_generateur:
                                 contexte=contexte, session=session, annee=int(annee), variante=variante,
                                 competences_actives=actives, points_par_competence=points_par_competence,
                                 seed=f"{annee}-{session}-{variante}", competences=competences,
+                                options_par_competence={"styles_paragraphe": options_styles_paragraphe} if options_styles_paragraphe else None,
                             )
                             chemin_etudiant = Path(tmp) / f"{prefixe}_etudiant.docx"
                             chemin_corrige  = Path(tmp) / f"{prefixe}_corrige.docx"
@@ -391,6 +437,16 @@ with onglet_correction:
                         erreurs.append(f"{fichier.name} : {exc}")
 
             st.session_state["resultats_correction"] = resultats
+            # Sauvegarde automatique dans data/resultats/
+            DOSSIER_RESULTATS.mkdir(parents=True, exist_ok=True)
+            for r in resultats:
+                idf = r["identite"]
+                nom_fichier = f"{idf['nom']}_{idf['prenom']}_{r['session']}_{r['annee']}_{r['module']}.json"
+                chemin_json = DOSSIER_RESULTATS / nom_fichier
+                r_avec_config = dict(r)
+                r_avec_config["config_epreuve"] = config
+                chemin_json.write_text(json.dumps(r_avec_config, indent=2, ensure_ascii=False), encoding="utf-8")
+
             if avertissements:
                 st.warning("\n\n".join(avertissements))
             if erreurs:
@@ -398,13 +454,29 @@ with onglet_correction:
 
         resultats = st.session_state.get("resultats_correction", [])
         if resultats:
+            # Détection croisée : last_modified_by présent sur plusieurs copies
+            compteur_lmb = {}
+            for r in resultats:
+                lmb = r.get("metadonnees", {}).get("last_modified_by", "—")
+                if lmb and lmb != "—":
+                    compteur_lmb.setdefault(lmb, []).append(
+                        f"{r['identite']['nom']} {r['identite']['prenom']}"
+                    )
+            lmb_suspects = {lmb: noms for lmb, noms in compteur_lmb.items() if len(noms) > 1}
+
             lignes_synthese = []
             for resultat in resultats:
                 identite = resultat["identite"]
                 bareme = resultat["bareme_total"] or 1
                 pourcentage = round(100 * resultat["points_obtenus"] / bareme, 1)
                 watermark = resultat.get("watermark")
-                vigilance = "—" if watermark is None else ("✅" if watermark["ok"] else "⚠️ A verifier")
+                vigilance_wm = "—" if watermark is None else ("✅" if watermark["ok"] else "⚠️")
+                meta = resultat.get("metadonnees", {})
+                alertes_meta = list(meta.get("alertes", []))
+                lmb = meta.get("last_modified_by", "—")
+                if lmb in lmb_suspects:
+                    alertes_meta.append(f"Même compte '{lmb}' sur {len(lmb_suspects[lmb])} copies")
+                vigilance_meta = "⚠️" if alertes_meta else "✅"
                 lignes_synthese.append({
                     "Nom": identite["nom"],
                     "Prenom": identite["prenom"],
@@ -412,13 +484,15 @@ with onglet_correction:
                     "Bareme": bareme,
                     "Pourcentage": pourcentage,
                     "Statut": "Reussi" if pourcentage >= 50 else "Echoue",
-                    "Tracabilite": vigilance,
+                    "Watermark": vigilance_wm,
+                    "Métadonnées": vigilance_meta,
                 })
             df_synthese = pd.DataFrame(lignes_synthese)
             if any(r.get("watermark") for r in resultats):
                 st.caption(
-                    "Colonne 'Tracabilite' : indicateur de vigilance (substitution de fichier ou "
-                    "donnees source modifiees), pas une preuve. A verifier manuellement avant toute decision."
+                    "Colonne 'Watermark' : substitution de fichier ou données modifiées. "
+                    "Colonne 'Métadonnées' : auteur/modificateur/durée suspects. "
+                    "⚠️ = à vérifier manuellement, jamais une preuve."
                 )
 
             col1, col2 = st.columns(2)
@@ -446,20 +520,80 @@ with onglet_correction:
                 mime="text/csv",
             )
 
-            with st.expander("Detail par etudiant et par critere"):
-                for resultat in resultats:
-                    identite = resultat["identite"]
-                    bareme = resultat["bareme_total"] or 1
-                    pourcentage = round(100 * resultat["points_obtenus"] / bareme, 1)
-                    st.markdown(
-                        f"**{identite['nom']} {identite['prenom']}** — "
-                        f"Score : {resultat['points_obtenus']:.2f} / {bareme} ({pourcentage}%)"
-                    )
+            if len(resultats) >= 2:
+                st.info("Consultez l'onglet **Rapports** pour les graphiques et le rapport de classe.")
+
+            st.markdown("---")
+            st.markdown("**Détail par étudiant**")
+            fc1, fc2, fc3 = st.columns([2, 1, 1])
+            with fc1:
+                recherche = st.text_input("🔍 Rechercher (nom ou prénom)", placeholder="ex: Dupont", label_visibility="collapsed")
+            with fc2:
+                tri_choix = st.selectbox("Trier par", ["Nom (A→Z)", "Score (↑)", "Score (↓)"], label_visibility="collapsed")
+            with fc3:
+                filtre_statut = st.multiselect("Statut", ["✅ Réussi", "❌ Échoué"], default=["✅ Réussi", "❌ Échoué"], label_visibility="collapsed")
+
+            # Indexer les résultats avec leur position d'origine (pour les clés Streamlit)
+            resultats_indexes = list(enumerate(resultats))
+
+            # Filtrage
+            if recherche.strip():
+                terme = recherche.strip().lower()
+                resultats_indexes = [
+                    (i, r) for i, r in resultats_indexes
+                    if terme in r["identite"]["nom"].lower() or terme in r["identite"]["prenom"].lower()
+                ]
+            if filtre_statut and len(filtre_statut) < 2:
+                vouloir_reussi = "✅ Réussi" in filtre_statut
+                resultats_indexes = [
+                    (i, r) for i, r in resultats_indexes
+                    if (r["points_obtenus"] / (r["bareme_total"] or 1) >= 0.5) == vouloir_reussi
+                ]
+
+            # Tri
+            if tri_choix == "Nom (A→Z)":
+                resultats_indexes.sort(key=lambda x: (x[1]["identite"]["nom"], x[1]["identite"]["prenom"]))
+            elif tri_choix == "Score (↑)":
+                resultats_indexes.sort(key=lambda x: x[1]["points_obtenus"])
+            elif tri_choix == "Score (↓)":
+                resultats_indexes.sort(key=lambda x: x[1]["points_obtenus"], reverse=True)
+
+            st.caption(f"{len(resultats_indexes)} copie(s) affichée(s) sur {len(resultats)}")
+
+            for idx_r, resultat in resultats_indexes:
+                identite = resultat["identite"]
+                bareme = resultat["bareme_total"] or 1
+                pourcentage = round(100 * resultat["points_obtenus"] / bareme, 1)
+                icone_statut = "✅" if pourcentage >= 50 else "❌"
+                label_expander = (
+                    f"{icone_statut} {identite['nom']} {identite['prenom']} — "
+                    f"{resultat['points_obtenus']:.2f} / {bareme} ({pourcentage}%)"
+                )
+                with st.expander(label_expander):
                     watermark = resultat.get("watermark")
                     if watermark and not watermark["ok"]:
                         for message in watermark["messages"]:
                             st.warning(message)
-                    for exercice in resultat["exercices"]:
+                    meta = resultat.get("metadonnees")
+                    if meta:
+                        alertes_meta = list(meta.get("alertes", []))
+                        lmb = meta.get("last_modified_by", "—")
+                        if lmb in lmb_suspects:
+                            alertes_meta.append(
+                                f"Compte '{lmb}' identique sur : {', '.join(lmb_suspects[lmb])}"
+                            )
+                        with st.expander("🔍 Métadonnées du fichier"):
+                            c1, c2 = st.columns(2)
+                            c1.markdown(f"**Auteur original** : {meta['creator']}")
+                            c1.markdown(f"**Dernière modif. par** : {lmb}")
+                            c2.markdown(f"**Créé le** : {meta['created']}")
+                            c2.markdown(f"**Modifié le** : {meta['modified']}")
+                            duree = meta.get("duree_minutes")
+                            if duree is not None:
+                                c1.markdown(f"**Durée de travail** : {duree} min")
+                            for alerte in alertes_meta:
+                                st.warning(f"⚠️ {alerte}")
+                    for idx_e, exercice in enumerate(resultat["exercices"]):
                         st.markdown(
                             f"*{exercice['titre']}* — "
                             f"{exercice['points_obtenus']:.2f} / {exercice['points_max']:.2f}"
@@ -467,7 +601,12 @@ with onglet_correction:
                         # Tableau compétences
                         lignes_tableau = []
                         for critere in exercice["criteres"]:
-                            icone = "✅" if critere["statut"] == "reussi" else "❌"
+                            if critere.get("corrige_manuellement"):
+                                icone = "✏️"
+                            elif critere["statut"] == "reussi":
+                                icone = "✅"
+                            else:
+                                icone = "❌"
                             lignes_tableau.append({
                                 "": icone,
                                 "Compétence": critere.get("competence", critere["description"]),
@@ -479,7 +618,7 @@ with onglet_correction:
                             column_config={"": st.column_config.TextColumn(width="small")},
                         )
                         # Feedback détaillé pour les critères non acquis
-                        criteres_manques = [c for c in exercice["criteres"] if c["statut"] != "reussi"]
+                        criteres_manques = [c for c in exercice["criteres"] if c["statut"] != "reussi" and not c.get("corrige_manuellement")]
                         if criteres_manques:
                             lignes_feedback = []
                             for critere in criteres_manques:
@@ -489,32 +628,410 @@ with onglet_correction:
                                     f"- **{label}** : {resume}" if resume else f"- À revoir : **{label}**"
                                 )
                             st.markdown("**Feedback :**\n" + "\n".join(lignes_feedback))
-                    st.divider()
 
-# --- Onglet 3 : Rapports PDF ------------------------------------------------
+                        # --- Correction manuelle ---
+                        with st.expander("✏️ Correction manuelle"):
+                            corrections_en_attente = {}
+                            for idx_c, critere in enumerate(exercice["criteres"]):
+                                label = critere.get("competence", critere["description"])
+                                key_base = f"manuel_{idx_r}_{idx_e}_{idx_c}"
+                                col1, col2 = st.columns([2, 3])
+                                with col1:
+                                    pts_actuels = critere["points_obtenus"]
+                                    pts_max = critere["points_max"]
+                                    nouveau_pts = st.number_input(
+                                        f"{label}",
+                                        min_value=0.0,
+                                        max_value=float(pts_max),
+                                        value=float(round(pts_actuels, 2)),
+                                        step=0.5,
+                                        key=key_base + "_pts",
+                                    )
+                                with col2:
+                                    motif = st.text_input(
+                                        "Motif",
+                                        value=critere.get("motif_manuel", ""),
+                                        placeholder="Ex : travail partiel accepté",
+                                        key=key_base + "_motif",
+                                    )
+                                corrections_en_attente[idx_c] = (nouveau_pts, motif)
+
+                            if st.button("Appliquer les corrections", key=f"btn_manuel_{idx_r}_{idx_e}"):
+                                for idx_c, (pts, motif) in corrections_en_attente.items():
+                                    critere = exercice["criteres"][idx_c]
+                                    pts_anciens = critere["points_obtenus"]
+                                    delta = pts - pts_anciens
+                                    critere["points_obtenus"] = pts
+                                    critere["statut"] = "reussi" if pts >= critere["points_max"] - 1e-6 else "echoue"
+                                    critere["corrige_manuellement"] = (pts != pts_anciens or bool(motif))
+                                    if motif:
+                                        critere["motif_manuel"] = motif
+                                    # Recalculer les totaux
+                                    exercice["points_obtenus"] += delta
+                                    resultat["points_obtenus"] += delta
+                                st.success("Corrections appliquées.")
+                                st.rerun()
+
+# --- Onglet 3 : Rapports ------------------------------------------------
 with onglet_rapports:
-    st.subheader("Rapports PDF")
+    st.subheader("Rapports")
     resultats_rapports = st.session_state.get("resultats_correction", [])
 
     if not resultats_rapports:
         st.info("Lancez d'abord une correction dans l'onglet 'Correction'.")
     else:
         st.write(f"{len(resultats_rapports)} copie(s) corrigee(s) disponible(s).")
-        if st.button("Generer les rapports PDF (ZIP)"):
-            with tempfile.TemporaryDirectory() as tmp:
-                chemin_zip = Path(tmp) / "rapports.zip"
-                generer_zip_rapports(
-                    resultats_rapports, chemin_zip, tmp,
-                    nom_cours=configuration_cours.get("nom_cours", ""),
-                    code_cours=configuration_cours.get("code_cours", ""),
-                )
-                st.download_button(
-                    "Telecharger le ZIP des rapports",
-                    data=chemin_zip.read_bytes(),
-                    file_name="rapports_pdf.zip",
-                    mime="application/zip",
-                )
 
-# --- Onglet 4 : Historique et statistiques (a developper) ------------------
+        col_btn1, col_btn2 = st.columns(2)
+
+        with col_btn1:
+            st.markdown("**Rapports individuels**")
+            st.caption("Un PDF par étudiant (score, compétences, feedback), regroupés dans un ZIP.")
+            if st.button("Générer les rapports étudiants (ZIP)"):
+                # Charger l'historique pour enrichir les PDF individuels
+                historiques_pdf = {}
+                if DOSSIER_RESULTATS.exists():
+                    for f in DOSSIER_RESULTATS.glob("*.json"):
+                        try:
+                            r_hist = json.loads(f.read_text(encoding="utf-8"))
+                            idf_h = r_hist["identite"]
+                            cle_h = (idf_h["nom"], idf_h["prenom"])
+                            historiques_pdf.setdefault(cle_h, []).append(r_hist)
+                        except Exception:
+                            pass
+                    # Trier par session/année et exclure la session courante
+                    sessions_courantes = {(r["session"], r["annee"]) for r in resultats_rapports}
+                    for cle_h in historiques_pdf:
+                        historiques_pdf[cle_h] = sorted(
+                            [r for r in historiques_pdf[cle_h] if (r["session"], r["annee"]) not in sessions_courantes],
+                            key=lambda x: (x["annee"], x["session"])
+                        )
+
+                with tempfile.TemporaryDirectory() as tmp:
+                    chemin_zip = Path(tmp) / "rapports.zip"
+                    generer_zip_rapports(
+                        resultats_rapports, chemin_zip, tmp,
+                        nom_cours=configuration_cours.get("nom_cours", ""),
+                        code_cours=configuration_cours.get("code_cours", ""),
+                        historiques=historiques_pdf,
+                    )
+                    st.download_button(
+                        "Télécharger le ZIP des rapports",
+                        data=chemin_zip.read_bytes(),
+                        file_name="rapports_etudiants.zip",
+                        mime="application/zip",
+                    )
+
+        with col_btn2:
+            st.markdown("**Rapport de classe**")
+            st.caption("Un seul PDF avec statistiques, graphiques et détail des compétences.")
+            if st.button("Générer le rapport de classe (PDF)", disabled=len(resultats_rapports) < 2):
+                with tempfile.TemporaryDirectory() as tmp:
+                    chemin_pdf = Path(tmp) / "rapport_classe.pdf"
+                    generer_rapport_classe_pdf(
+                        resultats_rapports, chemin_pdf,
+                        nom_cours=configuration_cours.get("nom_cours", ""),
+                        code_cours=configuration_cours.get("code_cours", ""),
+                    )
+                    st.download_button(
+                        "Télécharger le rapport de classe",
+                        data=chemin_pdf.read_bytes(),
+                        file_name="rapport_classe.pdf",
+                        mime="application/pdf",
+                    )
+            if len(resultats_rapports) < 2:
+                st.caption("(nécessite au moins 2 copies corrigées)")
+
+        # Aperçu des graphiques dans l'onglet
+        if len(resultats_rapports) >= 2:
+            st.markdown("---")
+            st.markdown("**Aperçu — Analyse de la classe**")
+
+            import altair as alt
+            bareme_r = resultats_rapports[0]["bareme_total"] or 1
+            pourcentages_r = [round(100 * r["points_obtenus"] / bareme_r, 1) for r in resultats_rapports]
+            moyenne_r = round(sum(pourcentages_r) / len(pourcentages_r), 1)
+            mediane_r = round(sorted(pourcentages_r)[len(pourcentages_r) // 2], 1)
+            nb_reussi_r = sum(1 for p in pourcentages_r if p >= 50)
+
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Moyenne", f"{moyenne_r} %")
+            m2.metric("Médiane", f"{mediane_r} %")
+            m3.metric("Réussite", f"{nb_reussi_r}/{len(pourcentages_r)}")
+            m4.metric("Min / Max", f"{min(pourcentages_r):.0f} % / {max(pourcentages_r):.0f} %")
+
+            df_hist_r = pd.DataFrame({"Score (%)": pourcentages_r})
+            hist_r = (
+                alt.Chart(df_hist_r)
+                .mark_bar(color="#5BC4E8", stroke="#2a8caa", strokeWidth=1)
+                .encode(
+                    alt.X("Score (%):Q", bin=alt.Bin(step=10), title="Score (%)", scale=alt.Scale(domain=[0, 100])),
+                    alt.Y("count():Q", title="Nb étudiants"),
+                    tooltip=[alt.Tooltip("Score (%):Q", bin=alt.Bin(step=10)), "count():Q"],
+                )
+                .properties(title="Distribution des scores", height=220)
+            )
+            st.altair_chart(hist_r, use_container_width=True)
+
+            comp_stats_r = {}
+            for r in resultats_rapports:
+                for ex in r["exercices"]:
+                    for c in ex["criteres"]:
+                        label = c.get("competence", c["description"])[:40]
+                        if label not in comp_stats_r:
+                            comp_stats_r[label] = {"reussi": 0, "total": 0}
+                        comp_stats_r[label]["total"] += 1
+                        if c["statut"] == "reussi":
+                            comp_stats_r[label]["reussi"] += 1
+
+            lignes_comp_r = [
+                {"Compétence": label, "Taux (%)": round(100 * v["reussi"] / v["total"], 1),
+                 "Réussis": v["reussi"], "Total": v["total"],
+                 "Couleur": "#22c55e" if round(100 * v["reussi"] / v["total"], 1) >= 75
+                             else "#f59e0b" if round(100 * v["reussi"] / v["total"], 1) >= 50 else "#ef4444"}
+                for label, v in comp_stats_r.items()
+            ]
+            df_comp_r = pd.DataFrame(lignes_comp_r).sort_values("Taux (%)")
+            COULEURS_D = ["#22c55e", "#f59e0b", "#ef4444"]
+            bars_r = (
+                alt.Chart(df_comp_r)
+                .mark_bar()
+                .encode(
+                    alt.Y("Compétence:N", sort=None, title=None),
+                    alt.X("Taux (%):Q", scale=alt.Scale(domain=[0, 100]), title="Taux de réussite (%)"),
+                    color=alt.Color("Couleur:N", scale=alt.Scale(domain=COULEURS_D, range=COULEURS_D), legend=None),
+                    tooltip=["Compétence:N", "Taux (%):Q", "Réussis:Q", "Total:Q"],
+                )
+                .properties(title="Taux de réussite par compétence", height=max(180, len(df_comp_r) * 35))
+            )
+            ligne_50_r = alt.Chart(pd.DataFrame({"x": [50]})).mark_rule(color="#888", strokeDash=[4, 3]).encode(x="x:Q")
+            st.altair_chart(bars_r + ligne_50_r, use_container_width=True)
+
+            meilleures_r = df_comp_r.nlargest(3, "Taux (%)")
+            difficiles_r = df_comp_r.nsmallest(3, "Taux (%)")
+            c_ok2, c_ko2 = st.columns(2)
+            with c_ok2:
+                st.success("**Mieux réussies**\n\n" + "\n\n".join(
+                    f"- {row['Compétence']} ({row['Taux (%)']:.0f} %)" for _, row in meilleures_r.iterrows()
+                ))
+            with c_ko2:
+                st.error("**Plus difficiles**\n\n" + "\n\n".join(
+                    f"- {row['Compétence']} ({row['Taux (%)']:.0f} %)" for _, row in difficiles_r.iterrows()
+                ))
+
+# --- Onglet 4 : Historique ---------------------------------------------------
 with onglet_historique:
-    st.info("Onglet en cours de developpement (etape 6 du brief).")
+    st.subheader("Historique des corrections")
+
+    # Charger tous les JSON sauvegardés
+    fichiers_hist = sorted(DOSSIER_RESULTATS.glob("*.json")) if DOSSIER_RESULTATS.exists() else []
+    if not fichiers_hist:
+        st.info("Aucune correction sauvegardée. Lancez une correction pour alimenter l'historique.")
+    else:
+        tous_resultats_hist = []
+        for f in fichiers_hist:
+            try:
+                tous_resultats_hist.append(json.loads(f.read_text(encoding="utf-8")))
+            except Exception:
+                pass
+
+        # --- Vue globale de la classe ---
+        st.markdown("### Vue globale — progression de la classe")
+        sessions_stats = {}
+        for r in tous_resultats_hist:
+            cle = f"{r['session']} {r['annee']} ({r['module']})"
+            bareme_h = r["bareme_total"] or 1
+            pct = round(100 * r["points_obtenus"] / bareme_h, 1)
+            if cle not in sessions_stats:
+                sessions_stats[cle] = []
+            sessions_stats[cle].append(pct)
+
+        # Index session → config_epreuve (première copie qui en possède une)
+        configs_par_session = {}
+        for r in tous_resultats_hist:
+            cle = f"{r['session']} {r['annee']} ({r['module']})"
+            if cle not in configs_par_session and r.get("config_epreuve"):
+                configs_par_session[cle] = r["config_epreuve"]
+
+        if len(sessions_stats) >= 1:
+            lignes_glob = []
+            for session_label, pcts in sorted(sessions_stats.items()):
+                a_config = "✅" if session_label in configs_par_session else "—"
+                lignes_glob.append({
+                    "Session": session_label,
+                    "Nb copies": len(pcts),
+                    "Moyenne (%)": round(sum(pcts) / len(pcts), 1),
+                    "Min (%)": min(pcts),
+                    "Max (%)": max(pcts),
+                    "Réussis": sum(1 for p in pcts if p >= 50),
+                    "Épreuve": a_config,
+                })
+            df_glob = pd.DataFrame(lignes_glob)
+            st.dataframe(df_glob, hide_index=True)
+
+            # Détail de l'épreuve par session
+            sessions_avec_config = [s for s in sorted(sessions_stats.keys()) if s in configs_par_session]
+            if sessions_avec_config:
+                session_detail = st.selectbox(
+                    "Consulter l'épreuve d'une session", ["— Choisir —"] + sessions_avec_config,
+                    key="hist_session_detail"
+                )
+                if session_detail != "— Choisir —":
+                    cfg = configs_par_session[session_detail]
+                    with st.expander(f"Épreuve : {session_detail}", expanded=True):
+                        st.caption(
+                            f"Module : {cfg.get('module', '?')} · "
+                            f"Variante : {cfg.get('variante', '?')} · "
+                            f"Contexte : {cfg.get('contexte', '?')}"
+                        )
+                        # Tableau des compétences évaluées
+                        exercices_cfg = cfg.get("exercices", [])
+                        lignes_ep = []
+                        for ex in exercices_cfg:
+                            for c in ex.get("criteres", []):
+                                lignes_ep.append({
+                                    "Exercice": ex.get("titre", "?"),
+                                    "Compétence": c.get("competence", c.get("description", "?")),
+                                    "Barème": c.get("points_max", "?"),
+                                })
+                        if lignes_ep:
+                            df_ep = pd.DataFrame(lignes_ep)
+                            total_ep = sum(
+                                c.get("points_max", 0)
+                                for ex in exercices_cfg
+                                for c in ex.get("criteres", [])
+                                if isinstance(c.get("points_max"), (int, float))
+                            )
+                            st.dataframe(df_ep, hide_index=True)
+                            st.caption(f"Barème total : {total_ep} pt(s)")
+
+            if len(sessions_stats) >= 2:
+                import altair as alt
+                courbe = (
+                    alt.Chart(df_glob)
+                    .mark_line(point=True, color="#5BC4E8")
+                    .encode(
+                        alt.X("Session:N", sort=None, title="Session"),
+                        alt.Y("Moyenne (%):Q", scale=alt.Scale(domain=[0, 100]), title="Moyenne classe (%)"),
+                        tooltip=["Session:N", "Moyenne (%):Q", "Nb copies:Q"],
+                    )
+                    .properties(title="Évolution de la moyenne de la classe", height=220)
+                )
+                st.altair_chart(courbe, use_container_width=True)
+
+        st.markdown("---")
+
+        # --- Vue par étudiant ---
+        st.markdown("### Progression par étudiant")
+
+        # Construire index {(nom, prenom): [résultats triés par session]}
+        par_etudiant = {}
+        for r in tous_resultats_hist:
+            idf = r["identite"]
+            cle_e = (idf["nom"], idf["prenom"])
+            par_etudiant.setdefault(cle_e, []).append(r)
+        for cle_e in par_etudiant:
+            par_etudiant[cle_e].sort(key=lambda x: (x["annee"], x["session"]))
+
+        # Sélecteur étudiant — label → clé pour éviter le split fragile sur les noms avec espaces
+        labels_etudiants = {
+            f"{nom} {prenom}".strip(): (nom, prenom)
+            for nom, prenom in sorted(par_etudiant.keys())
+        }
+        etudiant_choisi = st.selectbox("Choisir un étudiant", list(labels_etudiants.keys()))
+        if etudiant_choisi:
+            cle_ch = labels_etudiants[etudiant_choisi]
+            historique_etudiant = par_etudiant.get(cle_ch, [])
+
+            if historique_etudiant:
+                bareme_e = historique_etudiant[0]["bareme_total"] or 1
+
+                # Métriques rapides
+                pcts_e = [round(100 * r["points_obtenus"] / (r["bareme_total"] or 1), 1) for r in historique_etudiant]
+                me1, me2, me3 = st.columns(3)
+                me1.metric("Sessions", len(historique_etudiant))
+                me2.metric("Dernier score", f"{pcts_e[-1]} %")
+                if len(pcts_e) >= 2:
+                    delta = round(pcts_e[-1] - pcts_e[-2], 1)
+                    me3.metric("Évolution", f"{pcts_e[-1]} %", delta=f"{delta:+.1f} %")
+
+                # Courbe de progression
+                lignes_prog = [
+                    {
+                        "Session": f"{r['session']} {r['annee']}",
+                        "Score (%)": round(100 * r["points_obtenus"] / (r["bareme_total"] or 1), 1),
+                    }
+                    for r in historique_etudiant
+                ]
+                df_prog = pd.DataFrame(lignes_prog)
+
+                import altair as alt
+                courbe_e = (
+                    alt.Chart(df_prog)
+                    .mark_line(point=True, color="#E0007A")
+                    .encode(
+                        alt.X("Session:N", sort=None),
+                        alt.Y("Score (%):Q", scale=alt.Scale(domain=[0, 100])),
+                        tooltip=["Session:N", "Score (%):Q"],
+                    )
+                    .properties(title=f"Progression de {etudiant_choisi}", height=200)
+                )
+                ligne_50_e = alt.Chart(pd.DataFrame({"y": [50]})).mark_rule(
+                    color="#888", strokeDash=[4, 3]
+                ).encode(y="y:Q")
+                st.altair_chart(courbe_e + ligne_50_e, use_container_width=True)
+
+                # Tableau comparaison compétences inter-sessions
+                st.markdown("**Détail des compétences par session**")
+                # Collecter toutes les compétences rencontrées
+                toutes_comps = []
+                for r in historique_etudiant:
+                    for ex in r["exercices"]:
+                        for c in ex["criteres"]:
+                            label = c.get("competence", c["description"])
+                            if label not in toutes_comps:
+                                toutes_comps.append(label)
+
+                lignes_comp_hist = []
+                for comp in toutes_comps:
+                    ligne = {"Compétence": comp}
+                    for r in historique_etudiant:
+                        session_label = f"{r['session']} {r['annee']}"
+                        val = "—"
+                        for ex in r["exercices"]:
+                            for c in ex["criteres"]:
+                                if c.get("competence", c["description"]) == comp:
+                                    pts = c["points_obtenus"]
+                                    pts_max = c["points_max"]
+                                    icone = "✅" if c["statut"] == "reussi" else "❌"
+                                    val = f"{icone} {pts:.1f}/{pts_max:.1f}"
+                        ligne[session_label] = val
+                    lignes_comp_hist.append(ligne)
+
+                st.dataframe(pd.DataFrame(lignes_comp_hist), hide_index=True)
+
+        st.markdown("---")
+        st.caption(f"{len(fichiers_hist)} fichier(s) dans l'historique — dossier : data/resultats/")
+
+        with st.expander("🗑️ Gestion de l'historique"):
+            st.warning("La suppression est irréversible.")
+            c_del1, c_del2 = st.columns(2)
+            with c_del1:
+                # Supprimer uniquement l'étudiant sélectionné
+                if etudiant_choisi:
+                    nom_s, prenom_s = labels_etudiants[etudiant_choisi]
+                    fichiers_etudiant = [
+                        f for f in fichiers_hist
+                        if f.name.startswith(f"{nom_s}_{prenom_s}_")
+                    ]
+                    if st.button(f"Supprimer l'historique de {etudiant_choisi} ({len(fichiers_etudiant)} fichier(s))"):
+                        for f in fichiers_etudiant:
+                            f.unlink()
+                        st.success(f"Historique de {etudiant_choisi} supprimé.")
+                        st.rerun()
+            with c_del2:
+                if st.button("Supprimer tout l'historique", type="primary"):
+                    for f in fichiers_hist:
+                        f.unlink()
+                    st.success("Historique entièrement effacé.")
+                    st.rerun()

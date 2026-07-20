@@ -72,16 +72,26 @@ def _texte_pied(doc):
 
 def _compter_notes_de_bas_de_page(doc):
     """Compte les notes de bas de page utilisateur (hors séparateurs système)."""
+    FOOTNOTES_REL = (
+        "http://schemas.openxmlformats.org/officeDocument/2006/"
+        "relationships/footnotes"
+    )
     try:
-        footnotes_part = doc.part.footnotes
-        if footnotes_part is None:
-            return 0
-        notes = footnotes_part._element.findall(qn("w:footnote"))
-        # Les id -1 et 0 sont les séparateurs système
-        user_notes = [n for n in notes if n.get(qn("w:id")) not in ("-1", "0")]
-        return len(user_notes)
+        from lxml import etree
+        for rel in doc.part.rels.values():
+            if rel.reltype == FOOTNOTES_REL:
+                root = etree.fromstring(rel.target_part.blob)
+                notes = root.findall(qn("w:footnote"))
+                # Les id -1 et 0 sont les séparateurs système
+                user_notes = [
+                    n for n in notes
+                    if n.get(qn("w:id")) not in ("-1", "0")
+                    and n.get(qn("w:type")) is None
+                ]
+                return len(user_notes)
     except Exception:
-        return 0
+        pass
+    return 0
 
 
 def _a_saut_de_page(doc, ancre):
@@ -220,26 +230,73 @@ def _corriger_styles_paragraphe(doc, critere):
     points_max = critere.get("points", 1)
     style_attendu = critere.get("style_attendu", "body_text")
     ancres = critere.get("ancres", [])
+    taille_attendue_pt = critere.get("taille_pt")        # ex: 13
+    justification_attendue = critere.get("justifie", False)
+    tolerance_pt = 1
+
     if not ancres:
         return points_max, 0, ["Aucun paragraphe à vérifier"]
 
-    pts_par = points_max / len(ancres)
+    # Sous-critères : application du style + (optionnel) taille + justification
+    nb_sous = 1 + (1 if taille_attendue_pt else 0) + (1 if justification_attendue else 0)
+    pts_par_sous = points_max / nb_sous
     pts = 0.0
     details = []
 
-    for ancre in ancres:
-        para = _trouver_paragraphe(doc, ancre)
-        if para is None:
-            details.append(f"Paragraphe « {ancre[:30]}... » : introuvable (0 pt)")
-            continue
-        if est_style(para, style_attendu):
-            pts += pts_par
-            details.append(f"Style correct sur « {ancre[:30]}... » : +{pts_par:.2f} pt")
-        else:
-            details.append(
-                f"Style incorrect sur « {ancre[:30]}... » : "
-                f"{para.style.name} trouvé (0 pt)"
-            )
+    # --- 1. Style appliqué aux paragraphes ---
+    nb_ok = sum(
+        1 for ancre in ancres
+        if (p := _trouver_paragraphe(doc, ancre)) is not None and est_style(p, style_attendu)
+    )
+    if nb_ok == len(ancres):
+        pts += pts_par_sous
+        details.append(f"Style « Corps de texte » appliqué ({nb_ok}/{len(ancres)} paragraphes) : +{pts_par_sous:.2f} pt")
+    elif nb_ok > 0:
+        partiel = pts_par_sous * nb_ok / len(ancres)
+        pts += partiel
+        details.append(f"Style partiel ({nb_ok}/{len(ancres)} paragraphes) : +{partiel:.2f} pt")
+    else:
+        for ancre in ancres:
+            p = _trouver_paragraphe(doc, ancre)
+            nom = p.style.name if p else "introuvable"
+            details.append(f"Style incorrect sur « {ancre[:30]}... » : {nom} trouvé (0 pt)")
+
+    # --- 2. Taille de police modifiée dans la définition du style ---
+    if taille_attendue_pt:
+        try:
+            style_obj = None
+            for s in doc.styles:
+                if canonique(s.style_id) == style_attendu or canonique(s.name) == style_attendu:
+                    style_obj = s
+                    break
+            taille_trouvee = style_obj.font.size.pt if (style_obj and style_obj.font.size) else None
+            if taille_trouvee and abs(taille_trouvee - taille_attendue_pt) <= tolerance_pt:
+                pts += pts_par_sous
+                details.append(f"Taille du style : {taille_trouvee:.0f} pt : +{pts_par_sous:.2f} pt")
+            else:
+                val = f"{taille_trouvee:.0f} pt" if taille_trouvee else "non définie"
+                details.append(f"Taille du style incorrecte : {val} (attendu {taille_attendue_pt} pt) (0 pt)")
+        except Exception:
+            details.append("Taille du style : impossible à lire (0 pt)")
+
+    # --- 3. Justification du texte dans la définition du style ---
+    if justification_attendue:
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        try:
+            style_obj = None
+            for s in doc.styles:
+                if canonique(s.style_id) == style_attendu or canonique(s.name) == style_attendu:
+                    style_obj = s
+                    break
+            align = style_obj.paragraph_format.alignment if style_obj else None
+            if align == WD_ALIGN_PARAGRAPH.JUSTIFY:
+                pts += pts_par_sous
+                details.append(f"Justification du style : correcte : +{pts_par_sous:.2f} pt")
+            else:
+                nom_align = align.name if align is not None else "non définie"
+                details.append(f"Justification du style : {nom_align} (justifié attendu) (0 pt)")
+        except Exception:
+            details.append("Justification du style : impossible à lire (0 pt)")
 
     return points_max, pts, details
 
@@ -341,23 +398,92 @@ def _corriger_rechercher_remplacer(doc, critere):
 
 
 def _corriger_saisie_texte(doc, critere):
+    """Vérifie la saisie de caractères spéciaux depuis une image (non copiable).
+
+    Deux sous-critères (points_max / 2 chacun) :
+      1. Tous les caractères spéciaux sont présents dans la zone de saisie
+      2. La séquence complète est exacte
+    """
     points_max = critere.get("points", 1)
-    mots_cles = [_normaliser_texte(m) for m in critere.get("mots_cles", [])]
-    texte = _texte_document(doc)
+    ancre_zone = critere.get("ancre_zone", "Zone de saisie")
+    sequence_attendue = critere.get("sequence_attendue", "")
+    chars_speciaux = critere.get("chars_speciaux", [])
+
+    # Repli vers l'ancien mode mots-clés si la config est ancienne
+    if not sequence_attendue:
+        mots_cles = [_normaliser_texte(m) for m in critere.get("mots_cles", [])]
+        texte = _texte_document(doc)
+        pts = sum(1 for m in mots_cles if m in texte) / max(len(mots_cles), 1) * points_max
+        details = [f"Mot-clé « {m} » {'trouvé' if m in texte else 'absent'}" for m in mots_cles]
+        return points_max, pts, details
+
+    pts_par = points_max / 2
+    pts = 0.0
     details = []
 
-    if not mots_cles:
-        return points_max, 0, ["Aucun mot-clé défini"]
+    # Trouver le texte saisi dans le tableau de saisie qui suit l'ancre
+    para_zone = _trouver_paragraphe(doc, ancre_zone)
+    texte_saisi = ""
+    if para_zone is not None:
+        # Chercher le premier tableau dont l'élément XML suit l'ancre dans le corps
+        body = doc.element.body
+        children = list(body)
+        try:
+            ancre_idx = next(i for i, el in enumerate(children) if el is para_zone._p)
+        except StopIteration:
+            ancre_idx = -1
 
-    pts_par = points_max / len(mots_cles)
-    pts = 0.0
+        from docx.oxml.ns import qn as _qn
+        for el in children[ancre_idx + 1:]:
+            if el.tag == _qn("w:tbl"):
+                # Tableau trouvé : lire cell(1, 0) = zone de frappe étudiant
+                from docx.table import Table
+                tbl = Table(el, doc)
+                try:
+                    texte_saisi = tbl.cell(1, 0).text.strip()
+                except Exception:
+                    pass
+                break
+            # S'arrêter si on rencontre un autre paragraphe non vide (hors ancre)
+            if el.tag == _qn("w:p"):
+                txt = "".join(r.text or "" for r in el.findall(f".//{_qn('w:t')}")).strip()
+                if txt and txt != ancre_zone:
+                    break
 
-    for mot in mots_cles:
-        if mot in texte:
-            pts += pts_par
-            details.append(f"Mot-clé « {mot} » trouvé : +{pts_par:.2f} pt")
-        else:
-            details.append(f"Mot-clé « {mot} » absent (0 pt)")
+    if not texte_saisi:
+        details.append("Zone de saisie vide ou introuvable (0 pt)")
+        details.append("Séquence exacte : non évaluable (0 pt)")
+        return points_max, 0, details
+
+    # --- Sous-critère 1 : caractères spéciaux tous présents ---
+    chars_presents = [c for c in chars_speciaux if c in texte_saisi]
+    chars_absents  = [c for c in chars_speciaux if c not in texte_saisi]
+    if not chars_absents:
+        pts += pts_par
+        details.append(f"Caractères spéciaux {chars_speciaux} tous présents : +{pts_par:.2f} pt")
+    elif chars_presents:
+        partiel = pts_par * len(chars_presents) / len(chars_speciaux)
+        pts += partiel
+        details.append(
+            f"Caractères spéciaux partiels — présents : {chars_presents}, "
+            f"absents : {chars_absents} : +{partiel:.2f} pt"
+        )
+    else:
+        details.append(f"Aucun caractère spécial trouvé {chars_speciaux} (0 pt)")
+
+    # --- Sous-critère 2 : séquence exacte (tolérance sur les espaces internes) ---
+    # Un espace visuel entre deux caractères spéciaux (ex: "}  [") peut être dû
+    # au rendu de la police dans l'image — on compare sans espaces internes.
+    saisi_sans_espaces = texte_saisi.replace(" ", "")
+    attendu_sans_espaces = sequence_attendue.replace(" ", "")
+    if saisi_sans_espaces == attendu_sans_espaces:
+        pts += pts_par
+        details.append(f"Séquence correcte {sequence_attendue!r} : +{pts_par:.2f} pt")
+    else:
+        details.append(
+            f"Séquence incorrecte : {texte_saisi!r} saisi, "
+            f"{sequence_attendue!r} attendu (0 pt)"
+        )
 
     return points_max, pts, details
 
@@ -478,6 +604,32 @@ def corriger_critere_word(doc, critere):
     return _DISPATCH[type_critere](doc, critere)
 
 
+def _extraire_metadonnees_docx(doc):
+    """Extrait les métadonnées de traçabilité d'un document Word."""
+    props = doc.core_properties
+    creator = str(props.author or "").strip()
+    last_modified_by = str(props.last_modified_by or "").strip()
+    created = props.created
+    modified = props.modified
+
+    duree_minutes = None
+    if created and modified and modified >= created:
+        duree_minutes = round((modified - created).total_seconds() / 60, 1)
+
+    alertes = []
+    if duree_minutes is not None and duree_minutes < 5:
+        alertes.append(f"Durée de travail très courte : {duree_minutes} min")
+
+    return {
+        "creator": creator or "—",
+        "last_modified_by": last_modified_by or "—",
+        "created": created.strftime("%Y-%m-%d %H:%M") if created else "—",
+        "modified": modified.strftime("%Y-%m-%d %H:%M") if modified else "—",
+        "duree_minutes": duree_minutes,
+        "alertes": alertes,
+    }
+
+
 def corriger_copie_word(chemin_fichier, config):
     """Corrige une copie Word selon la config et retourne le résultat structuré."""
     doc = Document(str(chemin_fichier))
@@ -496,6 +648,7 @@ def corriger_copie_word(chemin_fichier, config):
         "module": config.get("module"),
         "variante": config.get("variante"),
         "watermark": None,
+        "metadonnees": _extraire_metadonnees_docx(doc),
         "exercices": [],
         "points_obtenus": 0.0,
         "points_max": 0.0,

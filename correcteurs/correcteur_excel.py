@@ -460,6 +460,40 @@ def _corriger_tcd(chemin_fichier, critere):
     return points_max, (points_max if ok else 0), details
 
 
+def _corriger_formule_concat(ws_formules, ws_valeurs, critere):
+    """Verifie qu'une formule produit la bonne concatenation.
+    Accepte CONCAT, CONCATENATE, et l'operateur & sans imposer laquelle."""
+    cellules = critere["cellules"]
+    valeurs_reference = critere.get("valeurs_reference", {})
+    points_max = critere.get("points", len(cellules))
+    points_par_cellule = points_max / len(cellules)
+    points_obtenus = 0.0
+    details = []
+
+    for cellule in cellules:
+        formule = _formule_str(ws_formules[cellule])
+        valeur_calculee = ws_valeurs[cellule].value
+
+        if formule is None:
+            details.append(f"{cellule} : pas de formule (0 pt)")
+            continue
+
+        utilise_concat = _contient_fonction(formule, ["CONCAT", "CONCATENATE"]) or "&" in formule
+        if not utilise_concat:
+            details.append(f"{cellule} : aucune concatenation detectee (CONCAT, CONCATENATE ou &) (0 pt)")
+            continue
+
+        ref = valeurs_reference.get(cellule)
+        if ref and str(valeur_calculee or "").strip() != ref.strip():
+            details.append(f"{cellule} : resultat incorrect — attendu '{ref}' (0 pt)")
+            continue
+
+        points_obtenus += points_par_cellule
+        details.append(f"{cellule} : OK (+{points_par_cellule:.2f} pt)")
+
+    return points_max, points_obtenus, details
+
+
 def _corriger_texte_motcles(ws_valeurs, critere):
     points_max = critere.get("points", 1)
     cellule = critere["cellule"]
@@ -487,6 +521,7 @@ _DISPATCH = {
     "recopie_formule": lambda wf, wv, cf, critere: _corriger_recopie_formule(wf, wv, critere),
     "mise_en_forme_cellule": lambda wf, wv, cf, critere: _corriger_mise_en_forme_cellule(wv, critere),
     "format_nombre": lambda wf, wv, cf, critere: _corriger_format_nombre(wv, critere),
+    "formule_concat": lambda wf, wv, cf, critere: _corriger_formule_concat(wf, wv, critere),
 }
 
 
@@ -504,6 +539,32 @@ def corriger_critere(wb_formules, wb_valeurs, chemin_fichier, exercice, critere)
     return _DISPATCH[type_critere](ws_formules, ws_valeurs, chemin_fichier, critere)
 
 
+def _extraire_metadonnees_xlsx(wb):
+    """Extrait les métadonnées de traçabilité d'un classeur Excel."""
+    props = wb.properties
+    creator = str(props.creator or "").strip()
+    last_modified_by = str(props.lastModifiedBy or "").strip()
+    created = props.created
+    modified = props.modified
+
+    duree_minutes = None
+    if created and modified and modified >= created:
+        duree_minutes = round((modified - created).total_seconds() / 60, 1)
+
+    alertes = []
+    if duree_minutes is not None and duree_minutes < 5:
+        alertes.append(f"Durée de travail très courte : {duree_minutes} min")
+
+    return {
+        "creator": creator or "—",
+        "last_modified_by": last_modified_by or "—",
+        "created": created.strftime("%Y-%m-%d %H:%M") if created else "—",
+        "modified": modified.strftime("%Y-%m-%d %H:%M") if modified else "—",
+        "duree_minutes": duree_minutes,
+        "alertes": alertes,
+    }
+
+
 def corriger_copie(chemin_fichier, config):
     """Corrige une copie etudiante selon une config d'epreuve et renvoie le resultat structure."""
     wb_formules = openpyxl.load_workbook(chemin_fichier, data_only=False)
@@ -518,6 +579,7 @@ def corriger_copie(chemin_fichier, config):
         "module": config.get("module"),
         "variante": config.get("variante"),
         "watermark": verifier_watermark(wb_formules, config),
+        "metadonnees": _extraire_metadonnees_xlsx(wb_valeurs),
         "exercices": [],
         "points_obtenus": 0.0,
         "points_max": 0.0,

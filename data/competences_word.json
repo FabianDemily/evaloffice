@@ -20,11 +20,11 @@
   {
     "id": "styles_paragraphe",
     "label": "Styles de paragraphe",
-    "description": "Appliquer des styles de paragraphe (Corps de texte, etc.)",
+    "description": "Appliquer et modifier le style Corps de texte (taille 13 pt, justifié)",
     "groupe": "structure",
     "type": "styles_paragraphe",
     "actif_defaut": true,
-    "points_defaut": 2
+    "points_defaut": 3
   },
   {
     "id": "mise_en_forme_caracteres",

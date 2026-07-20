@@ -9,6 +9,7 @@ les points viennent du catalogue ou des surcharges fournies par l'appelant.
 
 import json
 import random
+import uuid
 from pathlib import Path
 
 import openpyxl
@@ -43,6 +44,8 @@ COMPETENCES_PATH = RACINE / "data" / "competences.json"
 FONCTIONS_EN = {
     "SOMME": "SUM", "MOYENNE": "AVERAGE", "MAX": "MAX", "MIN": "MIN",
     "NB": "COUNT", "NB.SI": "COUNTIF", "SI": "IF", "ET": "AND", "OU": "OR",
+    "CONCAT": "CONCAT", "CONCATENATE": "CONCATENATE",
+    "RECHERCHEV": "VLOOKUP",
 }
 
 
@@ -124,7 +127,20 @@ def _calculer_agregat(fonction, donnees, colonne):
     return None  # fonction inconnue/personnalisee : pas de verification de resultat, juste de syntaxe
 
 
-def _construire_groupe_formules(wb_etudiant, wb_corrige, theme, donnees, competences_par_id, actives):
+_TAUX_MARGE = [0.10, 0.15, 0.20, 0.25, 0.30]
+
+_PAIRES_SI = [
+    ("OK", "BAS"),
+    ("SUFFISANT", "INSUFFISANT"),
+    ("DISPO", "RUPTURE"),
+    ("CONFORME", "NON-CONF."),
+    ("VALIDE", "INVALIDE"),
+    ("ACTIF", "INACTIF"),
+]
+_SEUILS_SI = [3, 4, 5, 6, 7, 8, 10]
+
+
+def _construire_groupe_formules(wb_etudiant, wb_corrige, theme, donnees, competences_par_id, actives, rng):
     """Construit l'exercice 'Formules de base'.
 
     Generique : toute competence du groupe 'formules' de type formule_fonction
@@ -142,11 +158,16 @@ def _construire_groupe_formules(wb_etudiant, wb_corrige, theme, donnees, compete
     comp_multiplication = next((c for c in comp_formules if c["type"] == "formule_multiplication"), None)
     comp_op_mixtes = next((c for c in comp_formules if c["type"] == "formule_operateurs_mixtes"), None)
     comp_si = next((c for c in comp_formules if c["id"] == "formule_si"), None)
-    comp_agregats = [c for c in comp_formules if c["type"] == "formule_fonction" and c is not comp_si]
+    comp_nbsi = next((c for c in comp_formules if c["id"] == "formule_nbsi"), None)
+    comp_concat = next((c for c in comp_formules if c["id"] == "formule_concat"), None)
+    comp_agregats = [
+        c for c in comp_formules
+        if c["type"] == "formule_fonction" and c not in (comp_si, comp_nbsi)
+    ]
 
     # Attribution dynamique des colonnes apres A (item), B (prix), C (quantite)
     prochaine = ord("D")
-    col_ca = col_marge = col_op = col_si = None
+    col_ca = col_marge = col_op = col_si = col_concat = None
     if comp_multiplication:
         col_ca = chr(prochaine); prochaine += 1
     if comp_op_mixtes:
@@ -154,20 +175,29 @@ def _construire_groupe_formules(wb_etudiant, wb_corrige, theme, donnees, compete
         col_op = chr(prochaine); prochaine += 1
     if comp_si:
         col_si = chr(prochaine); prochaine += 1
+    if comp_concat:
+        col_concat = chr(prochaine); prochaine += 1
 
     entetes = [theme["colonne_item"], "Prix", "Quantite"]
     if col_ca:     entetes.append("Chiffre d'affaires")
     if col_marge:  entetes.append("Marge unitaire")
     if col_op:     entetes.append("CA total (Prix + Marge) x Qte")
-    if col_si:     entetes.append("Stock suffisant (>5)")
+    if col_si:     entetes.append(f"Stock ({val_vrai_si} si >{seuil_si})")
+    if col_concat: entetes.append("Reference article")
     for ws in (ws_e, ws_c):
         ws.append(entetes)
+
+    seuil_si = rng.choice(_SEUILS_SI)
+    val_vrai_si, val_faux_si = rng.choice(_PAIRES_SI)
+    taux_marge = rng.choice(_TAUX_MARGE)
+    pct_marge = int(taux_marge * 100)
+    seuil_nbsi = rng.choice([s for s in _SEUILS_SI if s != seuil_si])
 
     debut = 2
     valeurs_reference_op = {}
     for i, ligne in enumerate(donnees):
         r = debut + i
-        marge = round(ligne["prix"] * 0.2, 2)
+        marge = round(ligne["prix"] * taux_marge, 2)
         for ws in (ws_e, ws_c):
             ws[f"A{r}"] = ligne["nom"]
             ws[f"B{r}"] = ligne["prix"]
@@ -181,7 +211,9 @@ def _construire_groupe_formules(wb_etudiant, wb_corrige, theme, donnees, compete
             ws_c[f"{col_op}{r}"] = f"=({col_marge}{r}+B{r})*C{r}"
             valeurs_reference_op[f"{col_op}{r}"] = round((ligne["prix"] + marge) * ligne["quantite"], 2)
         if col_si:
-            ws_c[f"{col_si}{r}"] = f"=IF(C{r}>5,\"OK\",\"BAS\")"
+            ws_c[f"{col_si}{r}"] = f'=IF(C{r}>{seuil_si},"{val_vrai_si}","{val_faux_si}")'
+        if col_concat:
+            ws_c[f"{col_concat}{r}"] = f'=CONCAT(A{r}," | ",C{r})'
     fin = debut + len(donnees) - 1
 
     criteres = []
@@ -203,7 +235,7 @@ def _construire_groupe_formules(wb_etudiant, wb_corrige, theme, donnees, compete
         cellules_op = [f"{col_op}{debut + i}" for i in range(len(donnees))]
         criteres.append({
             "id": comp_op_mixtes["id"], "competence": comp_op_mixtes["label"],
-            "description": f"CA total = (Prix + Marge) x Quantite — formule avec operateurs mixtes",
+            "description": f"CA total = (Prix + Marge {pct_marge}%) x Quantite — formule avec operateurs mixtes",
             "type": "formule_operateurs_mixtes", "cellules": cellules_op,
             "valeurs_reference": valeurs_reference_op, "nb_operateurs_min": 2,
             "tolerance": 0.02, "points": comp_op_mixtes.get("points_defaut", 3), "formule_obligatoire": True,
@@ -211,7 +243,7 @@ def _construire_groupe_formules(wb_etudiant, wb_corrige, theme, donnees, compete
         consignes.append(_formater_consigne(
             comp_op_mixtes, colonne_resultat=col_op,
             cellules=f"{col_op}{debut}:{col_op}{fin}",
-            libelle=f"CA total en colonne {col_op} : (Prix + Marge) x Quantite"
+            libelle=f"CA total en colonne {col_op} : (Prix + Marge {pct_marge}%) x Quantite"
         ))
 
     ligne_agregat = fin + 1
@@ -236,19 +268,63 @@ def _construire_groupe_formules(wb_etudiant, wb_corrige, theme, donnees, compete
         consignes.append(_formater_consigne(comp, cellule=cell, fonction=fonction, libelle=libelle))
         ligne_agregat += 1
 
+    if comp_nbsi:
+        cell_nbsi = f"C{ligne_agregat}"
+        valeur_ref_nbsi = sum(1 for ligne in donnees if ligne["quantite"] > seuil_nbsi)
+        for ws in (ws_e, ws_c):
+            ws[f"A{ligne_agregat}"] = f"Nb articles (quantite > {seuil_nbsi}) :"
+        ws_c[cell_nbsi] = f'=COUNTIF(C{debut}:C{fin},">{seuil_nbsi}")'
+        criteres.append({
+            "id": comp_nbsi["id"], "competence": comp_nbsi["label"],
+            "description": f"NB.SI : compter les quantites > {seuil_nbsi}",
+            "type": "formule_fonction",
+            "cellules": [cell_nbsi], "fonctions_attendues": ["NB.SI"],
+            "valeur_reference": valeur_ref_nbsi, "tolerance": 0,
+            "points": comp_nbsi.get("points_defaut", 2), "formule_obligatoire": True,
+        })
+        consignes.append(_formater_consigne(comp_nbsi, cellule=cell_nbsi, seuil=seuil_nbsi))
+        ligne_agregat += 1
+
     if comp_si:
         cellules_si = [f"{col_si}{debut + i}" for i in range(len(donnees))]
         valeurs_reference_si = {
-            f"{col_si}{debut + i}": ("OK" if ligne["quantite"] > 5 else "BAS")
+            f"{col_si}{debut + i}": (val_vrai_si if ligne["quantite"] > seuil_si else val_faux_si)
             for i, ligne in enumerate(donnees)
         }
         criteres.append({
             "id": comp_si["id"], "competence": comp_si["label"],
-            "description": "SI conditionnel sur le niveau de stock", "type": "formule_fonction",
+            "description": f"SI conditionnel : >{seuil_si} → {val_vrai_si}, sinon {val_faux_si}",
+            "type": "formule_fonction",
             "cellules": cellules_si, "fonctions_attendues": ["SI"], "valeurs_reference": valeurs_reference_si,
             "points": comp_si.get("points_defaut", 1), "formule_obligatoire": True,
         })
-        consignes.append(_formater_consigne(comp_si, cellules=f"{col_si}{debut}:{col_si}{fin}"))
+        consignes.append(_formater_consigne(
+            comp_si,
+            cellules=f"{col_si}{debut}:{col_si}{fin}",
+            seuil=seuil_si,
+            val_vrai=val_vrai_si,
+            val_faux=val_faux_si,
+        ))
+
+    if comp_concat:
+        cellules_concat = [f"{col_concat}{debut + i}" for i in range(len(donnees))]
+        valeurs_ref_concat = {
+            f"{col_concat}{debut + i}": f"{ligne['nom']} | {ligne['quantite']}"
+            for i, ligne in enumerate(donnees)
+        }
+        criteres.append({
+            "id": comp_concat["id"], "competence": comp_concat["label"],
+            "description": f"Concatenation : nom | quantite en colonne {col_concat}",
+            "type": "formule_concat",
+            "cellules": cellules_concat, "valeurs_reference": valeurs_ref_concat,
+            "points": comp_concat.get("points_defaut", 3),
+        })
+        consignes.append(_formater_consigne(
+            comp_concat,
+            colonne_resultat=col_concat,
+            cellules=f"{col_concat}{debut}:{col_concat}{fin}",
+            libelle_item=theme["colonne_item"].lower(),
+        ))
 
     _ecrire_consignes(ws_e, consignes)
 
@@ -595,6 +671,69 @@ def _construire_groupe_format_nombre(wb_etudiant, wb_corrige, theme, donnees, co
             "criteres": [critere], "consignes": consignes}
 
 
+def _construire_groupe_recherchev(wb_etudiant, wb_corrige, theme, donnees, competences_par_id, rng, actives):
+    if "recherchev" not in actives:
+        return None
+
+    feuille = "Ex9 - Recherche"
+    ws_e, ws_c = wb_etudiant.create_sheet(feuille), wb_corrige.create_sheet(feuille)
+
+    categories = list({ligne["categorie"] for ligne in donnees})
+    coefficients = {cat: round(rng.uniform(1.05, 1.50), 2) for cat in categories}
+
+    # Table source : A=item, B=categorie, C=prix, D=coeff (vide étudiant)
+    for ws in (ws_e, ws_c):
+        ws.append([theme["colonne_item"], "Categorie", "Prix", "Coefficient"])
+    debut = 2
+    for i, ligne in enumerate(donnees):
+        r = debut + i
+        for ws in (ws_e, ws_c):
+            ws[f"A{r}"] = ligne["nom"]
+            ws[f"B{r}"] = ligne["categorie"]
+            ws[f"C{r}"] = ligne["prix"]
+        ws_c[f"D{r}"] = f"=VLOOKUP(B{r},$F$2:$G${1 + len(categories)},2,0)"
+    fin = debut + len(donnees) - 1
+
+    # Table de référence : F=catégorie, G=coefficient
+    ws_e["F1"] = "Categorie"
+    ws_e["G1"] = "Coefficient"
+    ws_c["F1"] = "Categorie"
+    ws_c["G1"] = "Coefficient"
+    for j, (cat, coeff) in enumerate(coefficients.items(), start=2):
+        for ws in (ws_e, ws_c):
+            ws[f"F{j}"] = cat
+            ws[f"G{j}"] = coeff
+
+    plage_ref = f"F2:G{1 + len(categories)}"
+    cellules = [f"D{debut + i}" for i in range(len(donnees))]
+    valeurs_reference = {
+        f"D{debut + i}": coefficients[ligne["categorie"]]
+        for i, ligne in enumerate(donnees)
+    }
+
+    comp = competences_par_id["recherchev"]
+    critere = {
+        "id": "recherchev", "competence": comp["label"],
+        "description": "RECHERCHEV : trouver le coefficient de chaque categorie",
+        "type": "formule_fonction",
+        "cellules": cellules, "fonctions_attendues": ["RECHERCHEV"],
+        "valeurs_reference": valeurs_reference, "tolerance": 0.001,
+        "points": comp.get("points_defaut", 4), "formule_obligatoire": True,
+    }
+    consignes = [_formater_consigne(
+        comp,
+        colonne_resultat="D",
+        cellules=f"D{debut}:D{fin}",
+        plage_ref=plage_ref,
+    )]
+    _ecrire_consignes(ws_e, consignes, cellule="I1")
+
+    return {
+        "id": "ex9", "titre": "Fonction RECHERCHEV", "feuille": feuille,
+        "criteres": [critere], "consignes": consignes,
+    }
+
+
 CELLULE_NOM = "B3"
 CELLULE_PRENOM = "B4"
 
@@ -663,6 +802,7 @@ def generer_epreuve_excel(contexte, session, annee, variante, competences_active
     donnees_ex6 = _construire_donnees(theme, nb_lignes, rng)
     donnees_ex7 = _construire_donnees(theme, min(nb_lignes, 6), rng)
     donnees_ex8 = _construire_donnees(theme, nb_lignes, rng)
+    donnees_ex9 = _construire_donnees(theme, min(nb_lignes, 12), rng)
 
     wb_etudiant = openpyxl.Workbook()
     wb_etudiant.remove(wb_etudiant.active)
@@ -670,14 +810,14 @@ def generer_epreuve_excel(contexte, session, annee, variante, competences_active
     wb_corrige.remove(wb_corrige.active)
 
     exercices = [
-        _construire_groupe_formules(wb_etudiant, wb_corrige, theme, donnees_ex1, competences_par_id, actives),
+        _construire_groupe_formules(wb_etudiant, wb_corrige, theme, donnees_ex1, competences_par_id, actives, rng),
         _construire_groupe_tri(wb_etudiant, wb_corrige, theme, donnees_ex2a, donnees_ex2b, competences_par_id, actives, rng),
         _construire_groupe_visuel(wb_etudiant, wb_corrige, theme, competences_par_id, actives, rng, options_par_competence, contexte),
         _construire_groupe_tcd(wb_etudiant, wb_corrige, theme, donnees_ex4, competences_par_id, actives),
-        _construire_groupe_synthese(wb_etudiant, wb_corrige, competences_par_id, actives),
         _construire_groupe_recopie(wb_etudiant, wb_corrige, theme, donnees_ex6, competences_par_id, rng, actives),
         _construire_groupe_format_cellule(wb_etudiant, wb_corrige, theme, donnees_ex7, competences_par_id, actives),
         _construire_groupe_format_nombre(wb_etudiant, wb_corrige, theme, donnees_ex8, competences_par_id, actives),
+        _construire_groupe_recherchev(wb_etudiant, wb_corrige, theme, donnees_ex9, competences_par_id, rng, actives),
     ]
     exercices = [e for e in exercices if e is not None]
 

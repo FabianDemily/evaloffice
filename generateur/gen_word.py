@@ -173,6 +173,147 @@ def _set_run_format(run, gras=False, taille_pt=None, couleur_hex=None, italique=
         run.font.color.rgb = RGBColor(r, g, b)
 
 
+def _ajouter_tableau_saisie(doc, texte_prefill=""):
+    """Insère un tableau 2 lignes pour la zone de saisie étudiant.
+
+    Ligne 0 : label grisé (instruction).
+    Ligne 1 : cellule de frappe, fond jaune pâle, grande hauteur, bordure bleue.
+    """
+    from docx.oxml.ns import qn as _qn
+    from docx.oxml import OxmlElement
+    from lxml import etree
+
+    def _set_cell_bg(cell, couleur_hex):
+        """Fond de cellule (couleur hex sans #)."""
+        tc = cell._tc
+        tcPr = tc.get_or_add_tcPr()
+        shd = OxmlElement("w:shd")
+        shd.set(_qn("w:val"), "clear")
+        shd.set(_qn("w:color"), "auto")
+        shd.set(_qn("w:fill"), couleur_hex)
+        tcPr.append(shd)
+
+    def _set_table_borders(table, couleur_hex, taille_pt=12):
+        """Bordure extérieure du tableau."""
+        tbl = table._tbl
+        tblPr = tbl.find(_qn("w:tblPr"))
+        if tblPr is None:
+            tblPr = OxmlElement("w:tblPr")
+            tbl.insert(0, tblPr)
+        tblBorders = OxmlElement("w:tblBorders")
+        sz = str(taille_pt * 8)  # unité = 1/8 pt
+        for side in ("top", "left", "bottom", "right", "insideH", "insideV"):
+            el = OxmlElement(f"w:{side}")
+            el.set(_qn("w:val"), "single")
+            el.set(_qn("w:sz"), sz)
+            el.set(_qn("w:space"), "0")
+            el.set(_qn("w:color"), couleur_hex)
+            tblBorders.append(el)
+        tblPr.append(tblBorders)
+
+    def _set_cell_height(row, hauteur_twips):
+        """Hauteur minimale d'une ligne (1 cm ≈ 567 twips)."""
+        trPr = row._tr.get_or_add_trPr()
+        trHeight = OxmlElement("w:trHeight")
+        trHeight.set(_qn("w:val"), str(hauteur_twips))
+        trHeight.set(_qn("w:hRule"), "atLeast")
+        trPr.append(trHeight)
+
+    table = doc.add_table(rows=2, cols=1)
+    table.style = "Table Grid"
+
+    # Ligne 0 — label instructionnel
+    cell_label = table.cell(0, 0)
+    _set_cell_bg(cell_label, "D9D9D9")  # gris clair
+    p_label = cell_label.paragraphs[0]
+    run_label = p_label.add_run("▶  Tapez votre réponse ici :")
+    run_label.font.size = Pt(10)
+    run_label.font.color.rgb = RGBColor(0x55, 0x55, 0x55)
+    run_label.font.italic = True
+
+    # Ligne 1 — zone de frappe
+    cell_saisie = table.cell(1, 0)
+    _set_cell_bg(cell_saisie, "FFFCDC")  # jaune pâle
+    _set_cell_height(table.rows[1], 1134)  # ~2 cm
+    p_saisie = cell_saisie.paragraphs[0]
+    if texte_prefill:
+        run_s = p_saisie.add_run(texte_prefill)
+        run_s.font.size = Pt(14)
+    else:
+        p_saisie.paragraph_format.space_before = Pt(6)
+
+    _set_table_borders(table, "3A6BC4", taille_pt=2)  # bleu, 2 pt
+
+
+def _generer_image_sequence(sequence):
+    """Génère un PNG (BytesIO) affichant la séquence en caractères lisibles.
+
+    L'image est non sélectionnable dans Word — l'étudiant doit taper au clavier.
+    """
+    import io
+    from PIL import Image, ImageDraw, ImageFont
+
+    FOND = (255, 252, 220)       # jaune pâle
+    BORDURE = (180, 140, 0)
+    TEXTE = (30, 30, 30)
+
+    TAILLE_PT = 36
+    PADDING = 20
+
+    POLICES_CANDIDATS = [
+        "/System/Library/Fonts/Courier New Bold.ttf",          # macOS
+        "/System/Library/Fonts/Supplemental/Courier New.ttf",
+        "/Library/Fonts/Courier New Bold.ttf",
+        "C:/Windows/Fonts/courbd.ttf",                          # Windows
+        "C:/Windows/Fonts/cour.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationMono-Bold.ttf",  # Linux
+        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",
+    ]
+    font = None
+    for chemin in POLICES_CANDIDATS:
+        try:
+            font = ImageFont.truetype(chemin, TAILLE_PT)
+            break
+        except (IOError, OSError):
+            continue
+    if font is None:
+        font = ImageFont.load_default()
+
+    # Mesurer la séquence entière (pas caractère par caractère) pour éviter les gaps artificiels
+    img_test = Image.new("RGB", (1, 1))
+    draw_test = ImageDraw.Draw(img_test)
+    bbox_seq = draw_test.textbbox((0, 0), sequence, font=font)
+    seq_w = bbox_seq[2] - bbox_seq[0]
+    seq_h = bbox_seq[3] - bbox_seq[1]
+
+    largeur = PADDING * 2 + seq_w
+    hauteur = PADDING * 2 + seq_h + 30  # +30 pour le label
+
+    img = Image.new("RGB", (largeur, hauteur), FOND)
+    draw = ImageDraw.Draw(img)
+
+    draw.rectangle([(0, 0), (largeur - 1, hauteur - 1)], outline=BORDURE, width=3)
+
+    try:
+        font_label = ImageFont.truetype(POLICES_CANDIDATS[0], 13)
+    except Exception:
+        font_label = ImageFont.load_default()
+    draw.text((PADDING, PADDING // 2), "Saisissez exactement :", font=font_label, fill=(100, 100, 100))
+
+    # Séquence rendue d'un bloc — pas d'espacement artificiel entre les caractères
+    y_texte = PADDING + 16
+    draw.text((PADDING, y_texte), sequence, font=font, fill=TEXTE)
+
+    # Soulignement continu sous toute la séquence pour montrer qu'elle est d'un seul tenant
+    y_souligne = y_texte + seq_h + 3
+    draw.line([(PADDING, y_souligne), (PADDING + seq_w, y_souligne)], fill=BORDURE, width=3)
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", dpi=(150, 150))
+    buf.seek(0)
+    return buf
+
+
 def _ajouter_paragraphe_instruction(doc, texte):
     """Ajoute une ligne de consigne en gris italique."""
     p = doc.add_paragraph()
@@ -190,7 +331,7 @@ def _ajouter_paragraphe_instruction(doc, texte):
 def generer_epreuve_word(
     contexte, session, annee, variante,
     competences_actives, points_par_competence=None,
-    seed=None, competences=None,
+    seed=None, competences=None, options_par_competence=None,
 ):
     """Génère (doc_etudiant, doc_corrige, config) pour une épreuve Word."""
     competences = competences or charger_competences_word()
@@ -208,7 +349,22 @@ def generer_epreuve_word(
     doc_c = Document()
 
     criteres = []
-    consignes = []
+    consignes_map = {}  # comp_id → texte consigne (assemblées dans l'ordre pédagogique à la fin)
+
+    # Ordre pédagogique : structure physique → styles → formatage → éléments sémantiques → TDM en dernier
+    ORDRE_PEDAGOGIQUE = [
+        "mise_en_page",
+        "structure_hierarchique",
+        "styles_paragraphe",
+        "mise_en_forme_caracteres",
+        "rechercher_remplacer",
+        "entete_pied_page",
+        "saisie_texte",
+        "stabilite_mise_en_page",
+        "note_de_bas_de_page",
+        "image",
+        "table_des_matieres",
+    ]
 
     # -----------------------------------------------------------------------
     # Mise en page (orientation + marges) — appliquée au corrigé uniquement
@@ -227,7 +383,7 @@ def generer_epreuve_word(
             section.top_margin = Cm(marge_cm)
             section.bottom_margin = Cm(marge_cm)
 
-        consignes.append(
+        consignes_map["mise_en_page"] = (
             f"Mise en page : passez le document en orientation paysage "
             f"et fixez les quatre marges à {marge_cm} cm."
         )
@@ -253,7 +409,7 @@ def generer_epreuve_word(
         pied_c = doc_c.sections[0].footer
         pied_c.paragraphs[0].text = "Document confidentiel"
 
-        consignes.append(
+        consignes_map["entete_pied_page"] = (
             f"En-tête : saisissez \"{session} {annee} — Document officiel\". "
             f"Pied de page : saisissez \"Document confidentiel\"."
         )
@@ -281,9 +437,9 @@ def generer_epreuve_word(
         toc_c = doc_c.add_paragraph()
         _inserer_champ_toc(toc_c)
 
-        consignes.append(
+        consignes_map["table_des_matieres"] = (
             "Table des matières : insérez une table des matières automatique "
-            "après avoir appliqué les styles de titres."
+            "après avoir appliqué les styles de titres (cette étape doit être réalisée en dernier)."
         )
         criteres.append({
             "id": "table_des_matieres", "type": "table_des_matieres",
@@ -322,9 +478,16 @@ def generer_epreuve_word(
         _set_run_format(run_fmt, gras=True, taille_pt=13, couleur_hex="E0007A")
         para_c.add_run(after)
 
-        consignes.append(
+        note_conflit = (
+            " Attention : appliquez d'abord le style « Corps de texte » (si demandé), "
+            "puis effectuez cette mise en forme."
+            if "styles_paragraphe" in actives else ""
+        )
+        consignes_map["mise_en_forme_caracteres"] = (
             f"Mise en forme : dans le premier paragraphe de l'introduction, "
-            f"mettez le mot « {ANCRE_FORMAT} » en gras, taille 13, couleur magenta (#E0007A)."
+            f"mettez le mot « {ANCRE_FORMAT} » en gras, taille 13, couleur magenta "
+            f"(code hex #E0007A — ou via Autres couleurs > Personnalisée : R:224 V:0 B:122)."
+            f"{note_conflit}"
         )
         criteres.append({
             "id": "mise_en_forme_caracteres", "type": "mise_en_forme_caracteres",
@@ -341,7 +504,7 @@ def generer_epreuve_word(
     TERME_NOUVEAU = ctx["terme_nouveau"]
 
     if "rechercher_remplacer" in actives:
-        consignes.append(
+        consignes_map["rechercher_remplacer"] = (
             f"Rechercher-remplacer : remplacez toutes les occurrences de "
             f"« {TERME_ANCIEN} » par « {TERME_NOUVEAU} » dans tout le document."
         )
@@ -354,27 +517,58 @@ def generer_epreuve_word(
             "points": _points(competences_par_id, "rechercher_remplacer"),
         })
 
-    # Saisie de texte
+    # Saisie de texte — séquence de caractères spéciaux affichée en image (non copiable)
     ANCRE_SAISIE = "Zone de saisie"
-    TEXTE_A_SAISIR = ctx["saisie_texte"]
+
+    # Séquences par variante — différentes pour empêcher la copie entre étudiants
+    SEQUENCES = [
+        "{ABC}[€2025]",
+        "[XYZ]@{€100}",
+        "€{DEF}[50%]",
+        "{GHI}[€75]@",
+        "[JKL]{€30}%",
+        "€[MNO]{25%}",
+    ]
+    idx_variante = ord(variante.upper()) - ord("A") if variante else 0
+    SEQ_ATTENDUE = SEQUENCES[idx_variante % len(SEQUENCES)]
+    CHARS_SPECIAUX = sorted(set(c for c in SEQ_ATTENDUE if not c.isalnum()))
 
     if "saisie_texte" in actives:
         _ajouter_paragraphe_instruction(
-            doc_e, f"Saisissez le texte suivant : « {TEXTE_A_SAISIR} »"
+            doc_e,
+            "Lisez la séquence affichée dans l'image ci-dessous et saisissez-la "
+            "exactement dans la zone de saisie, caractère par caractère au clavier."
         )
-        doc_e.add_paragraph(ANCRE_SAISIE)
-        doc_c.add_paragraph(TEXTE_A_SAISIR)
 
-        consignes.append(
-            f"Saisie de texte : dans la zone prévue, saisissez exactement : "
-            f"« {TEXTE_A_SAISIR} »"
+        # --- Génération de l'image (Pillow) ---
+        img_buf = _generer_image_sequence(SEQ_ATTENDUE)
+        doc_e.add_picture(img_buf, width=Cm(10))
+        doc_e.add_paragraph("")
+
+        # Ancre (invisible pour l'étudiant, sert au correcteur)
+        p_ancre = doc_e.add_paragraph(ANCRE_SAISIE)
+        p_ancre.runs[0].font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)  # blanc = invisible
+        p_ancre.runs[0].font.size = Pt(1)
+
+        # Tableau de saisie : ligne 0 = label, ligne 1 = zone de frappe
+        _ajouter_tableau_saisie(doc_e)
+
+        # Corrigé : ancre + tableau avec séquence correcte
+        doc_c.add_paragraph(ANCRE_SAISIE)
+        _ajouter_tableau_saisie(doc_c, texte_prefill=SEQ_ATTENDUE)
+
+        consignes_map["saisie_texte"] = (
+            "Saisie de texte : observez l'image ci-dessous et recopiez "
+            "la séquence exactement dans la zone prévue, "
+            "caractère par caractère au clavier."
         )
         criteres.append({
             "id": "saisie_texte", "type": "saisie_texte",
             "competence": competences_par_id["saisie_texte"]["label"],
-            "description": "Texte saisi avec caractères spéciaux",
+            "description": f"Séquence {SEQ_ATTENDUE!r} saisie depuis une image",
             "ancre_zone": ANCRE_SAISIE,
-            "mots_cles": ctx["mots_cles_saisie"],
+            "sequence_attendue": SEQ_ATTENDUE,
+            "chars_speciaux": CHARS_SPECIAUX,
             "points": _points(competences_par_id, "saisie_texte"),
         })
 
@@ -401,7 +595,7 @@ def generer_epreuve_word(
         )
         doc_c.add_paragraph("[Image insérée par l'enseignant dans le corrigé]")
 
-        consignes.append(
+        consignes_map["image"] = (
             "Image : insérez une image illustrant le rapport. "
             "Sa largeur doit être comprise entre 5 et 12 cm."
         )
@@ -423,7 +617,7 @@ def generer_epreuve_word(
         para_c_saut = doc_c.add_paragraph(ANCRE_SAUT)
         _inserer_saut_de_page(para_c_saut)
 
-        consignes.append(
+        consignes_map["stabilite_mise_en_page"] = (
             f"Stabilité de la mise en page : insérez un saut de page "
             f"avant le paragraphe « {ANCRE_SAUT} »."
         )
@@ -448,7 +642,7 @@ def generer_epreuve_word(
             f"dans le paragraphe ci-dessus."
         )
 
-        consignes.append(
+        consignes_map["note_de_bas_de_page"] = (
             f"Note de bas de page : dans le paragraphe mentionnant « {TERME_NOTE} », "
             f"ajoutez une note de bas de page sur ce terme."
         )
@@ -484,9 +678,9 @@ def generer_epreuve_word(
         {"ancre": ANCRE_CONCLUSION, "style": "heading1"},
     ]
     if "structure_hierarchique" in actives:
-        consignes.append(
-            "Structure hiérarchique : appliquez les styles Titre 1 aux titres principaux "
-            "(Introduction, Données et résultats, Conclusion, titre du rapport) "
+        consignes_map["structure_hierarchique"] = (
+            f"Structure hiérarchique : appliquez le style Titre 1 aux titres principaux "
+            f"(\"{ANCRE_TITRE}\", Introduction, Données et résultats, Conclusion) "
             "et Titre 2 aux sous-titres (Présentation du secteur, Analyse statistique)."
         )
         criteres.append({
@@ -499,7 +693,15 @@ def generer_epreuve_word(
 
     # Styles de paragraphe (corps de texte)
     if "styles_paragraphe" in actives:
-        # Applique "Body Text" aux paragraphes de corps dans le corrigé
+        opts_sp = (options_par_competence or {}).get("styles_paragraphe", {})
+        taille_imposee = opts_sp.get("taille_imposee", True)
+        justifie = opts_sp.get("justifie", True)
+
+        # Taille varie selon la variante (cycle 12/13/14 pt) pour empêcher la copie
+        TAILLES_CYCLE = [13, 14, 12]
+        idx_variante = ord(variante.upper()) - ord("A") if variante else 0
+        TAILLE_CORPS = TAILLES_CYCLE[idx_variante % len(TAILLES_CYCLE)] if taille_imposee else None
+
         corps_ancres = [intro_text[:30], ctx["donnees_body"][:30]]
         for ancre in corps_ancres:
             for p in doc_c.paragraphs:
@@ -507,20 +709,55 @@ def generer_epreuve_word(
                     try:
                         p.style = doc_c.styles["Body Text"]
                     except KeyError:
-                        pass  # Style non disponible dans ce template
+                        pass
+        try:
+            from docx.enum.text import WD_ALIGN_PARAGRAPH
+            style_corps = doc_c.styles["Body Text"]
+            if taille_imposee:
+                style_corps.font.size = Pt(TAILLE_CORPS)
+            if justifie:
+                style_corps.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        except (KeyError, Exception):
+            pass
 
-        consignes.append(
-            "Styles de paragraphe : appliquez le style « Corps de texte » "
-            "aux paragraphes de contenu (paragraphes qui ne sont pas des titres)."
-        )
-        criteres.append({
+        # Construction de la consigne selon les options actives
+        modifications = []
+        if taille_imposee:
+            modifications.append(f"taille de police {TAILLE_CORPS} pt")
+        if justifie:
+            modifications.append("texte justifié")
+
+        if modifications:
+            consigne_sp = (
+                f"Styles de paragraphe : appliquez le style « Corps de texte » "
+                f"aux paragraphes de contenu (paragraphes qui ne sont pas des titres), "
+                f"puis modifiez ce style : {', '.join(modifications)}."
+            )
+        else:
+            consigne_sp = (
+                "Styles de paragraphe : appliquez le style « Corps de texte » "
+                "aux paragraphes de contenu (paragraphes qui ne sont pas des titres)."
+            )
+        consignes_map["styles_paragraphe"] = consigne_sp
+
+        critere_sp = {
             "id": "styles_paragraphe", "type": "styles_paragraphe",
             "competence": competences_par_id["styles_paragraphe"]["label"],
-            "description": "Style Corps de texte sur les paragraphes de contenu",
+            "description": f"Style Corps de texte appliqué" + (f", modifié ({TAILLE_CORPS} pt, justifié)" if modifications else ""),
             "style_attendu": "body_text",
             "ancres": corps_ancres,
             "points": _points(competences_par_id, "styles_paragraphe"),
-        })
+        }
+        if taille_imposee:
+            critere_sp["taille_pt"] = TAILLE_CORPS
+        if justifie:
+            critere_sp["justifie"] = True
+        criteres.append(critere_sp)
+
+    # -----------------------------------------------------------------------
+    # Assemblage des consignes dans l'ordre pédagogique
+    # -----------------------------------------------------------------------
+    consignes = [consignes_map[k] for k in ORDRE_PEDAGOGIQUE if k in consignes_map]
 
     # -----------------------------------------------------------------------
     # Config JSON
